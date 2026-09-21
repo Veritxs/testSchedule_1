@@ -90,8 +90,11 @@ export function totalSessionsFor(type: ClassType): number {
 }
 
 export function normalizeStartingSession(type: ClassType, session: number): number {
-  if (type === 'GSLC' || type === 'CUSTOM') return 1
-  return Math.min(Math.max(Math.round(session) || 1, 1), totalSessionsFor(type))
+  if (type === 'CUSTOM') return 1
+  // A GSLC keeps the session number it stands in for, so the ceiling is the
+  // largest academic session number rather than its own single-occurrence count.
+  const ceiling = type === 'GSLC' ? TYPE_RULES.LEC.totalSessions : totalSessionsFor(type)
+  return Math.min(Math.max(Math.round(session) || 1, 1), ceiling)
 }
 
 /** Dates for a personal schedule, bounded by its end date and a hard ceiling. */
@@ -112,20 +115,66 @@ function customSeriesDates(series: ScheduleSeries): string[] {
   return dates
 }
 
-/** Dates for an academic class, driven by its fixed cadence and session count. */
-function academicSeriesDates(series: ScheduleSeries): string[] {
-  const rule = TYPE_RULES[series.type]
-  const firstSession = normalizeStartingSession(series.type, series.startingSession)
-  const count = rule.totalSessions - firstSession + 1
-  return Array.from({ length: count }, (_, index) =>
-    addDays(series.firstDate, index * rule.intervalDays),
+/**
+ * Slots of the same mata kuliah and class type share one pool of academic
+ * sessions, so two slots on the same day take consecutive numbers (6 and 7) and
+ * the following week continues from there (8 and 9).
+ */
+function academicGroupOccurrences(group: ScheduleSeries[]): ScheduleOccurrence[] {
+  const type = group[0].type
+  const rule = TYPE_RULES[type]
+  const firstSession = Math.min(
+    ...group.map((series) => normalizeStartingSession(type, series.startingSession)),
   )
+  const capacity = Math.max(rule.totalSessions - firstSession + 1, 1)
+  const perSlot = rule.intervalDays === 0 ? 1 : Math.ceil(capacity / group.length) + 1
+
+  const candidates = group.flatMap((series) =>
+    Array.from({ length: perSlot }, (_, index) => ({
+      series,
+      date: addDays(series.firstDate, index * rule.intervalDays),
+    })),
+  )
+
+  candidates.sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) ||
+      left.series.startTime.localeCompare(right.series.startTime) ||
+      left.series.id.localeCompare(right.series.id),
+  )
+
+  const chosen = candidates.slice(0, capacity)
+  const countsBySeries = new Map<string, number>()
+  for (const item of chosen) {
+    countsBySeries.set(item.series.id, (countsBySeries.get(item.series.id) ?? 0) + 1)
+  }
+
+  return chosen
+    .map((item, index) => ({
+      id: `${item.series.id}:${item.date}`,
+      seriesId: item.series.id,
+      name: item.series.name,
+      type: item.series.type,
+      date: item.date,
+      startTime: item.series.startTime,
+      endTime: item.series.endTime,
+      sessionNumber: firstSession + index,
+      isRecurring: (countsBySeries.get(item.series.id) ?? 0) > 1,
+    }))
+    .filter((occurrence) => {
+      const series = group.find((item) => item.id === occurrence.seriesId)
+      return !series?.excludedDates.includes(occurrence.date)
+    })
 }
 
-export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence[] {
-  const dates =
-    series.type === 'CUSTOM' ? customSeriesDates(series) : academicSeriesDates(series)
-  const firstSession = normalizeStartingSession(series.type, series.startingSession)
+/** Slots that never share a session pool: personal schedules and one-off GSLCs. */
+function groupKey(series: ScheduleSeries): string {
+  if (series.type === 'CUSTOM' || series.type === 'GSLC') return `solo:${series.id}`
+  return `${series.type}:${normalizeScheduleName(series.name)}`
+}
+
+function customSeriesOccurrences(series: ScheduleSeries): ScheduleOccurrence[] {
+  const dates = customSeriesDates(series)
   const isRecurring = dates.length > 1
 
   return dates
@@ -137,10 +186,16 @@ export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence
       date,
       startTime: series.startTime,
       endTime: series.endTime,
-      sessionNumber: firstSession + index,
+      sessionNumber: index + 1,
       isRecurring,
     }))
     .filter((occurrence) => !series.excludedDates.includes(occurrence.date))
+}
+
+export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence[] {
+  return series.type === 'CUSTOM'
+    ? customSeriesOccurrences(series)
+    : academicGroupOccurrences([series])
 }
 
 export function getOccurrences(
@@ -148,8 +203,20 @@ export function getOccurrences(
   rangeStart?: string,
   rangeEnd?: string,
 ): ScheduleOccurrence[] {
-  return series
-    .flatMap(occurrencesForSeries)
+  const groups = new Map<string, ScheduleSeries[]>()
+  for (const item of series) {
+    const key = groupKey(item)
+    const existing = groups.get(key)
+    if (existing) existing.push(item)
+    else groups.set(key, [item])
+  }
+
+  return [...groups.values()]
+    .flatMap((group) =>
+      group[0].type === 'CUSTOM'
+        ? group.flatMap(customSeriesOccurrences)
+        : academicGroupOccurrences(group),
+    )
     .filter((occurrence) => !rangeStart || occurrence.date >= rangeStart)
     .filter((occurrence) => !rangeEnd || occurrence.date <= rangeEnd)
     .sort(
@@ -225,7 +292,7 @@ export function findDuplicateOccurrence(
   )
   if (!sameNamed.length) return null
 
-  const existingOccurrences = sameNamed.flatMap(occurrencesForSeries)
+  const existingOccurrences = getOccurrences(sameNamed)
 
   for (const occurrence of occurrencesForSeries(candidate)) {
     const clash = existingOccurrences.find(
@@ -242,6 +309,77 @@ export function findDuplicateOccurrence(
   }
 
   return null
+}
+
+export interface ReplacedSession {
+  name: string
+  date: string
+  sessionNumber: number
+}
+
+export type ApplyStatus = 'added' | 'replaced' | 'duplicate'
+
+export interface ApplyResult {
+  series: ScheduleSeries[]
+  status: ApplyStatus
+  duplicate?: DuplicateMatch
+  replaced?: ReplacedSession
+}
+
+/**
+ * Adds `candidate` to `existing`, with two special rules:
+ * - a GSLC stands in for the lecture session on the same date, so that lecture
+ *   occurrence is cancelled and the GSLC inherits its session number;
+ * - anything that already exists at the same name, date and time is rejected.
+ */
+export function applySeries(
+  existing: ScheduleSeries[],
+  candidate: ScheduleSeries,
+): ApplyResult {
+  if (candidate.type === 'GSLC') {
+    const lectures = existing.filter(
+      (series) =>
+        series.type === 'LEC' &&
+        normalizeScheduleName(series.name) === normalizeScheduleName(candidate.name),
+    )
+    const replacedOccurrence = getOccurrences(lectures).find(
+      (occurrence) => occurrence.date === candidate.firstDate,
+    )
+
+    if (replacedOccurrence) {
+      const updated = existing.map((series) =>
+        series.id === replacedOccurrence.seriesId
+          ? {
+              ...series,
+              excludedDates: Array.from(
+                new Set([...series.excludedDates, replacedOccurrence.date]),
+              ),
+            }
+          : series,
+      )
+      const gslc: ScheduleSeries = {
+        ...candidate,
+        startingSession: replacedOccurrence.sessionNumber,
+      }
+      const duplicate = findDuplicateOccurrence(gslc, updated)
+      if (duplicate) return { series: existing, status: 'duplicate', duplicate }
+
+      return {
+        series: [...updated, gslc],
+        status: 'replaced',
+        replaced: {
+          name: replacedOccurrence.name,
+          date: replacedOccurrence.date,
+          sessionNumber: replacedOccurrence.sessionNumber,
+        },
+      }
+    }
+  }
+
+  const duplicate = findDuplicateOccurrence(candidate, existing)
+  if (duplicate) return { series: existing, status: 'duplicate', duplicate }
+
+  return { series: [...existing, candidate], status: 'added' }
 }
 
 export function minutesFromTime(time: string): number {

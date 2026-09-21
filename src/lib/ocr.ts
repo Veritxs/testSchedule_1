@@ -180,12 +180,25 @@ async function imageToHighContrastCanvas(file: File): Promise<HTMLCanvasElement>
   }
 }
 
-export async function recognizeScheduleImage(
-  file: File,
+function draftKey(draft: ImportDraft): string {
+  return [
+    draft.name.trim().toLowerCase().replace(/\s+/g, ' '),
+    draft.type,
+    draft.date,
+    draft.startTime,
+    draft.endTime,
+  ].join('|')
+}
+
+/** Reads one or more screenshots with a single reader instance. */
+export async function recognizeScheduleImages(
+  files: File[],
   onProgress: (progress: number, status: string) => void,
 ): Promise<{ text: string; drafts: ImportDraft[] }> {
-  const canvas = await imageToHighContrastCanvas(file)
-  onProgress(0.05, 'Preparing private OCR…')
+  onProgress(0.02, 'Preparing private OCR…')
+
+  // Updated per image so the progress bar keeps moving during long reads.
+  let reportPageProgress: (progress: number) => void = () => {}
 
   const workerPromise = createWorker(
     'eng',
@@ -199,9 +212,9 @@ export async function recognizeScheduleImage(
       langPath: `${import.meta.env.BASE_URL}ocr`,
       logger: (message) => {
         if (message.status === 'recognizing text') {
-          onProgress(0.15 + message.progress * 0.85, 'Reading your screenshot…')
+          reportPageProgress(message.progress)
         } else {
-          onProgress(Math.max(0.05, message.progress * 0.15), 'Loading text reader…')
+          onProgress(Math.max(0.02, message.progress * 0.15), 'Loading text reader…')
         }
       },
     },
@@ -222,12 +235,41 @@ export async function recognizeScheduleImage(
       tessedit_pageseg_mode: PSM.SPARSE_TEXT,
       preserve_interword_spaces: '1',
     })
-    const result = await worker.recognize(canvas)
-    const text = result.data.text
-    return {
-      text,
-      drafts: parseScheduleText(text, toLocalDateString(new Date())),
+
+    const today = toLocalDateString(new Date())
+    const texts: string[] = []
+    const drafts: ImportDraft[] = []
+    const seen = new Set<string>()
+
+    for (const [index, file] of files.entries()) {
+      const label = files.length > 1 ? `image ${index + 1} of ${files.length}` : 'your screenshot'
+      const share = 0.85 / files.length
+      const base = 0.15 + index * share
+      onProgress(base, `Reading ${label}…`)
+      reportPageProgress = (progress) =>
+        onProgress(base + progress * share, `Reading ${label}…`)
+
+      const canvas = await imageToHighContrastCanvas(file)
+      const result = await worker.recognize(canvas)
+      const text = result.data.text
+      texts.push(files.length > 1 ? `--- ${file.name || label} ---\n${text}` : text)
+
+      for (const draft of parseScheduleText(text, today)) {
+        const key = draftKey(draft)
+        if (seen.has(key)) continue
+        seen.add(key)
+        drafts.push(draft)
+      }
+
+      onProgress(base + share, `Read ${label}`)
     }
+
+    drafts.sort(
+      (left, right) =>
+        left.date.localeCompare(right.date) || left.startTime.localeCompare(right.startTime),
+    )
+
+    return { text: texts.join('\n\n'), drafts }
   } finally {
     await worker.terminate()
   }

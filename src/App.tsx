@@ -6,9 +6,9 @@ import { ScreenshotImport, type ImportOutcome } from './components/ScreenshotImp
 import { SettingsForm } from './components/SettingsForm'
 import {
   addDays,
+  applySeries,
   calculateFreeSlots,
   createSeries,
-  findDuplicateOccurrence,
   formatLongDate,
   formatShortDate,
   formatWeekday,
@@ -86,47 +86,58 @@ function App() {
   }
 
   function addSchedule(values: ScheduleFormValues) {
-    const candidate = createSeries(values)
-    const duplicate = findDuplicateOccurrence(candidate, series)
-    if (duplicate) {
+    const result = applySeries(series, createSeries(values))
+    if (result.status === 'duplicate' && result.duplicate) {
       setAddError(
-        `“${duplicate.name}” is already in your timetable on ${formatLongDate(duplicate.date)} at ${duplicate.startTime}–${duplicate.endTime}, so nothing was added.`,
+        `“${result.duplicate.name}” is already in your timetable on ${formatLongDate(result.duplicate.date)} at ${result.duplicate.startTime}–${result.duplicate.endTime}, so nothing was added.`,
       )
       return
     }
 
     setAddError('')
-    setSeries((current) => [...current, candidate])
+    setSeries(result.series)
     setSelectedDate(values.firstDate)
     setOpenModal(null)
-    setToast(`${values.name} added`)
+    setToast(
+      result.status === 'replaced' && result.replaced
+        ? `${values.name} replaced Session ${result.replaced.sessionNumber}`
+        : `${values.name} added`,
+    )
   }
 
   function importSchedules(drafts: ImportDraft[]): ImportOutcome {
-    const accepted: ScheduleSeries[] = []
+    let working = series
+    let importedCount = 0
+    let replacedCount = 0
     const skipped: Array<{ name: string; date: string }> = []
+    let firstDate = ''
 
     for (const draft of drafts) {
-      const candidate = createSeries({ ...draft, firstDate: draft.date })
-      const duplicate = findDuplicateOccurrence(candidate, [...series, ...accepted])
-      if (duplicate) {
-        skipped.push({ name: duplicate.name, date: duplicate.date })
-      } else {
-        accepted.push(candidate)
+      const result = applySeries(working, createSeries({ ...draft, firstDate: draft.date }))
+      if (result.status === 'duplicate' && result.duplicate) {
+        skipped.push({ name: result.duplicate.name, date: result.duplicate.date })
+        continue
       }
+
+      working = result.series
+      if (result.status === 'replaced') replacedCount += 1
+      else importedCount += 1
+      if (!firstDate) firstDate = draft.date
     }
 
-    if (!accepted.length) return { importedCount: 0, skipped }
+    if (!importedCount && !replacedCount) return { importedCount: 0, replacedCount: 0, skipped }
 
-    setSeries((current) => [...current, ...accepted])
-    setSelectedDate(accepted[0].firstDate)
+    setSeries(working)
+    setSelectedDate(firstDate)
     setOpenModal(null)
-    setToast(
-      skipped.length
-        ? `${accepted.length} imported · ${skipped.length} already existed`
-        : `${accepted.length} class${accepted.length === 1 ? '' : 'es'} imported`,
-    )
-    return { importedCount: accepted.length, skipped }
+
+    const parts: string[] = []
+    if (importedCount) parts.push(`${importedCount} imported`)
+    if (replacedCount) parts.push(`${replacedCount} replaced a session`)
+    if (skipped.length) parts.push(`${skipped.length} already existed`)
+    setToast(parts.join(' · '))
+
+    return { importedCount, replacedCount, skipped }
   }
 
   function removeOccurrence() {

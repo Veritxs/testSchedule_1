@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { getTodayString, makeId, normalizeStartingSession, TYPE_RULES } from '../lib/schedule'
-import { recognizeScheduleImage } from '../lib/ocr'
+import { recognizeScheduleImages } from '../lib/ocr'
 import type { ClassType, ImportDraft } from '../types'
 
 export interface ImportOutcome {
   importedCount: number
+  replacedCount: number
   skipped: Array<{ name: string; date: string }>
 }
 
@@ -26,8 +27,8 @@ function emptyDraft(): ImportDraft {
 }
 
 export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) {
-  const [file, setFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [drafts, setDrafts] = useState<ImportDraft[]>([])
   const [rawText, setRawText] = useState('')
   const [progress, setProgress] = useState(0)
@@ -38,14 +39,14 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
 
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      previewUrls.forEach((url) => URL.revokeObjectURL(url))
     }
-  }, [previewUrl])
+  }, [previewUrls])
 
-  function chooseFile(nextFile: File | null) {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setFile(nextFile)
-    setPreviewUrl(nextFile ? URL.createObjectURL(nextFile) : '')
+  function chooseFiles(nextFiles: File[]) {
+    previewUrls.forEach((url) => URL.revokeObjectURL(url))
+    setFiles(nextFiles)
+    setPreviewUrls(nextFiles.map((item) => URL.createObjectURL(item)))
     setDrafts([])
     setRawText('')
     setError('')
@@ -53,13 +54,13 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
     setProgress(0)
   }
 
-  async function scanScreenshot() {
-    if (!file) return
+  async function scanScreenshots() {
+    if (!files.length) return
     setError('')
-    setStatus('Preparing screenshot…')
+    setStatus(files.length > 1 ? `Preparing ${files.length} screenshots…` : 'Preparing screenshot…')
     setProgress(0.02)
     try {
-      const result = await recognizeScheduleImage(file, (nextProgress, nextStatus) => {
+      const result = await recognizeScheduleImages(files, (nextProgress, nextStatus) => {
         setProgress(nextProgress)
         setStatus(nextStatus)
       })
@@ -72,7 +73,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
         setError('No complete classes were detected. A blank row was added so you can enter it manually.')
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'The screenshot could not be read.')
+      setError(reason instanceof Error ? reason.message : 'The screenshots could not be read.')
       setStatus('')
       setProgress(0)
     }
@@ -108,7 +109,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
     }
 
     const outcome = onImport(valid.map((draft) => ({ ...draft, name: draft.name.trim() })))
-    if (outcome.importedCount === 0) {
+    if (outcome.importedCount === 0 && outcome.replacedCount === 0) {
       const names = Array.from(new Set(outcome.skipped.map((item) => item.name))).join(', ')
       setError(
         `Nothing was added. ${names} already exists in your timetable at the same time, so it was skipped.`,
@@ -120,13 +121,24 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
     return (
       <div className="import-flow">
         <button className="upload-zone" type="button" onClick={() => inputRef.current?.click()}>
-          {previewUrl ? (
-            <img src={previewUrl} alt="Selected schedule screenshot" />
+          {previewUrls.length ? (
+            <>
+              <div className={`preview-grid${previewUrls.length > 1 ? ' preview-grid--multi' : ''}`}>
+                {previewUrls.map((url, index) => (
+                  <img src={url} alt={`Selected screenshot ${index + 1}`} key={url} />
+                ))}
+              </div>
+              <small>
+                {previewUrls.length === 1
+                  ? 'Tap to choose different screenshots'
+                  : `${previewUrls.length} screenshots selected · tap to change`}
+              </small>
+            </>
           ) : (
             <>
               <span className="upload-icon" aria-hidden="true">▣</span>
-              <strong>Choose a screenshot</strong>
-              <small>Select it from your iPhone Photos</small>
+              <strong>Choose screenshots</strong>
+              <small>Pick one or several from your iPhone Photos</small>
             </>
           )}
         </button>
@@ -135,7 +147,8 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
           ref={inputRef}
           type="file"
           accept="image/*"
-          onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
+          multiple
+          onChange={(event) => chooseFiles(Array.from(event.target.files ?? []))}
         />
 
         <div className="privacy-note">
@@ -153,8 +166,13 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
 
         <div className="form-actions">
           <button className="button button--ghost" type="button" onClick={onCancel}>Cancel</button>
-          <button className="button button--primary" type="button" disabled={!file || Boolean(status)} onClick={scanScreenshot}>
-            {status ? 'Reading…' : 'Read screenshot'}
+          <button
+            className="button button--primary"
+            type="button"
+            disabled={!files.length || Boolean(status)}
+            onClick={scanScreenshots}
+          >
+            {status ? 'Reading…' : files.length > 1 ? `Read ${files.length} screenshots` : 'Read screenshot'}
           </button>
         </div>
       </div>
@@ -168,7 +186,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
           <p className="eyebrow">Check before saving</p>
           <h3>{drafts.length} class{drafts.length === 1 ? '' : 'es'} found</h3>
         </div>
-        <button className="text-button" type="button" onClick={() => chooseFile(null)}>Start over</button>
+        <button className="text-button" type="button" onClick={() => chooseFiles([])}>Start over</button>
       </div>
 
       {error && <p className="import-warning" role="alert">{error}</p>}

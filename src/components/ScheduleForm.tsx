@@ -63,7 +63,7 @@ export function ScheduleForm({
     }
     if (type === 'GSLC') return 'This is saved only on the selected date.'
     const remaining = rule.totalSessions - normalizeStartingSession(type, startingSession) + 1
-    return `${rule.label}. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added.`
+    return `${rule.label}. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added. If this mata kuliah has another slot of the same type, they share the remaining sessions and the numbering continues across both.`
   }, [effectiveEndDate, isCustom, repeat, rule, startingSession, type])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
