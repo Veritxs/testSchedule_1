@@ -430,8 +430,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .week-grid__day.is-today { background: #fdf3ef; }
 .week-grid__line { position: absolute; right: 0; left: 0; border-top: 1px solid #ebe7de; }
 .week-grid__event { position: absolute; display: flex; overflow: hidden; align-items: flex-start; flex-direction: column; gap: 1px; padding: 4px 5px; border: 0; border-left: 3px solid var(--accent, #ed704f); border-radius: 7px; color: var(--accent, #ed704f); background: var(--accent-soft, #fdeae3); text-align: left; cursor: pointer; }
-.week-grid__event strong { overflow: hidden; width: 100%; font-size: 10px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.week-grid__event strong { display: -webkit-box; overflow: hidden; width: 100%; font-size: 10px; line-height: 1.22; word-break: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .week-grid__event span { font-size: 8px; opacity: 0.8; }
+.week-grid__event--short strong { -webkit-line-clamp: 1; }
 .week-grid__event--lec { --accent: #ed704f; --accent-soft: #fdeae3; }
 .week-grid__event--lab { --accent: #3f7fc1; --accent-soft: #e4eefa; }
 .week-grid__event--gslc { --accent: #9152c4; --accent-soft: #f2e8fb; }

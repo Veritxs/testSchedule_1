@@ -140,7 +140,7 @@ export function WeekGrid({
                 )
                 return (
                   <button
-                    className={`week-grid__event week-grid__event--${entry.type.toLowerCase()}`}
+                    className={`week-grid__event week-grid__event--${entry.type.toLowerCase()}${height < 44 ? ' week-grid__event--short' : ''}`}
                     key={entry.id}
                     type="button"
                     onClick={() => onSelectEntry(entry)}
