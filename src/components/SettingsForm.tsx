@@ -5,9 +5,17 @@ interface SettingsFormProps {
   preferences: UserPreferences
   onSave: (preferences: UserPreferences) => void
   onCancel: () => void
+  scheduleCount: number
+  onRequestRemoveAll: () => void
 }
 
-export function SettingsForm({ preferences, onSave, onCancel }: SettingsFormProps) {
+export function SettingsForm({
+  preferences,
+  onSave,
+  onCancel,
+  scheduleCount,
+  onRequestRemoveAll,
+}: SettingsFormProps) {
   const [dayStart, setDayStart] = useState(preferences.dayStart)
   const [dayEnd, setDayEnd] = useState(preferences.dayEnd)
   const [minimumFreeMinutes, setMinimumFreeMinutes] = useState(preferences.minimumFreeMinutes)
@@ -54,6 +62,26 @@ export function SettingsForm({ preferences, onSave, onCancel }: SettingsFormProp
         <span aria-hidden="true">⇧</span>
         <p><strong>Install on iPhone</strong>Open in Safari, tap Share, then “Add to Home Screen.”</p>
       </div>
+
+      <div className="danger-zone">
+        <div>
+          <strong>Remove all schedules</strong>
+          <span>
+            {scheduleCount === 0
+              ? 'You have no saved schedules yet.'
+              : `Deletes all ${scheduleCount} saved schedule${scheduleCount === 1 ? '' : 's'}, classes and personal ones.`}
+          </span>
+        </div>
+        <button
+          className="button button--danger"
+          type="button"
+          disabled={scheduleCount === 0}
+          onClick={onRequestRemoveAll}
+        >
+          Remove all
+        </button>
+      </div>
+
       <div className="form-actions">
         <button className="button button--ghost" type="button" onClick={onCancel}>Cancel</button>
         <button className="button button--primary" type="submit">Save settings</button>

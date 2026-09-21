@@ -26,7 +26,7 @@ import {
 import type { ImportDraft, ScheduleOccurrence, ScheduleSeries } from './types'
 
 type ViewMode = 'today' | 'week'
-type OpenModal = 'add' | 'import' | 'settings' | null
+type OpenModal = 'add' | 'import' | 'settings' | 'removeAll' | null
 
 function App() {
   const today = getTodayString()
@@ -57,6 +57,7 @@ function App() {
     () => getOccurrences(series, selectedDate, selectedDate),
     [selectedDate, series],
   )
+  const totalOccurrences = useMemo(() => getOccurrences(series).length, [series])
   const freeSlots = useMemo(
     () =>
       calculateFreeSlots(
@@ -145,6 +146,14 @@ function App() {
     )
     setToast(`${deleteTarget.name} schedule removed`)
     setDeleteTarget(null)
+  }
+
+  function removeAllSchedules() {
+    const removedCount = series.length
+    setSeries([])
+    setDeleteTarget(null)
+    setOpenModal(null)
+    setToast(`All ${removedCount} schedule${removedCount === 1 ? '' : 's'} removed`)
   }
 
   const weekRangeLabel = `${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)}`
@@ -245,6 +254,8 @@ function App() {
         <Modal title="Free-time settings" onClose={() => setOpenModal(null)}>
           <SettingsForm
             preferences={preferences}
+            scheduleCount={series.length}
+            onRequestRemoveAll={() => setOpenModal('removeAll')}
             onCancel={() => setOpenModal(null)}
             onSave={(next) => {
               setPreferences(next)
@@ -252,6 +263,29 @@ function App() {
               setToast('Settings saved')
             }}
           />
+        </Modal>
+      )}
+
+      {openModal === 'removeAll' && (
+        <Modal title="Remove all schedules" onClose={() => setOpenModal(null)}>
+          <div className="delete-sheet">
+            <div className="remove-all-warning">
+              <span aria-hidden="true">⚠</span>
+              <p>
+                <strong>This cannot be undone</strong>
+                {series.length} saved schedule{series.length === 1 ? '' : 's'} and{' '}
+                {totalOccurrences} upcoming occurrence{totalOccurrences === 1 ? '' : 's'} will be
+                deleted. Your settings and campus screenshots are kept.
+              </p>
+            </div>
+            <button className="delete-option delete-option--danger" type="button" onClick={removeAllSchedules}>
+              <strong>Yes, remove everything</strong>
+              <span>Start again with an empty timetable</span>
+            </button>
+            <button className="button button--ghost button--full" type="button" onClick={() => setOpenModal('settings')}>
+              Cancel
+            </button>
+          </div>
         </Modal>
       )}
 

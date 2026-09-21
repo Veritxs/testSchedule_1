@@ -355,3 +355,16 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 @media (min-width: 460px) {
   .segmented-control--quad { grid-template-columns: repeat(4, 1fr); }
 }
+
+
+/* Remove all schedules */
+.danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid #f0cfc7; border-radius: 14px; background: #fdf4f1; }
+.danger-zone > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.danger-zone strong { color: #a83a25; font-size: 13px; }
+.danger-zone span { color: #8a6a61; font-size: 10px; line-height: 1.45; }
+.button--danger { min-height: 40px; flex: 0 0 auto; padding: 0 14px; border: 1px solid #e0a595; color: #a83a25; background: #fff; font-size: 12px; }
+.button--danger:disabled { border-color: #e6ded9; color: #a9a29e; }
+.remove-all-warning { display: flex; gap: 11px; padding: 13px; border: 1px solid #f0c8be; border-radius: 14px; background: #fff7f4; }
+.remove-all-warning > span { color: #bd4a36; font-size: 20px; line-height: 1.2; }
+.remove-all-warning p { display: flex; margin: 0; flex-direction: column; gap: 3px; color: #7d6158; font-size: 11px; line-height: 1.5; }
+.remove-all-warning strong { color: #a83a25; font-size: 12px; }
