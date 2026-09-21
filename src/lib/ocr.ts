@@ -1,5 +1,4 @@
-import { createWorker, PSM } from 'tesseract.js'
-import engDataUrl from '@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz?url'
+import { createWorker, OEM, PSM } from 'tesseract.js'
 import workerUrl from 'tesseract.js/dist/worker.min.js?url'
 import coreUrl from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url'
 import { makeId, normalizeStartingSession, toLocalDateString } from './schedule'
@@ -188,19 +187,16 @@ export async function recognizeScheduleImage(
   const canvas = await imageToHighContrastCanvas(file)
   onProgress(0.05, 'Preparing private OCR…')
 
-  const languageResponse = await fetch(engDataUrl)
-  if (!languageResponse.ok) throw new Error('The offline text reader could not be loaded.')
-  const languageData = new Uint8Array(await languageResponse.arrayBuffer())
-
   const workerPromise = createWorker(
-    [{ code: 'eng', data: languageData }],
-    undefined,
+    'eng',
+    OEM.LSTM_ONLY,
     {
       // Self-hosting the worker and non-SIMD core avoids cross-origin worker
       // loading failures in iOS Safari and allows importing after installation.
       workerPath: workerUrl,
       workerBlobURL: false,
       corePath: coreUrl,
+      langPath: `${import.meta.env.BASE_URL}ocr`,
       logger: (message) => {
         if (message.status === 'recognizing text') {
           onProgress(0.15 + message.progress * 0.85, 'Reading your screenshot…')

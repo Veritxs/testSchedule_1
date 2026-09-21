@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 export default defineConfig({
   base: '/testSchedule_1/',
@@ -10,6 +11,15 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz',
+          dest: 'ocr',
+          rename: { stripBase: true },
+        },
+      ],
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
@@ -52,6 +62,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,wasm,gz}'],
+        additionalManifestEntries: [
+          { url: 'ocr/eng.traineddata.gz', revision: 'eng-best-int-v1' },
+        ],
         maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
         navigateFallback: '/testSchedule_1/index.html',
         cleanupOutdatedCaches: true,
