@@ -294,6 +294,12 @@ export function formatShortDate(value: string): string {
   }).format(parseLocalDate(value))
 }
 
+/** Compact column heading used by the week grid, e.g. 09/14. */
+export function formatMonthDay(value: string): string {
+  const date = parseLocalDate(value)
+  return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
+}
+
 export function formatWeekday(value: string, narrow = false): string {
   return new Intl.DateTimeFormat('en-GB', {
     weekday: narrow ? 'short' : 'long',
