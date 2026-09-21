@@ -1,4 +1,7 @@
-export type ClassType = 'LEC' | 'LAB' | 'GSLC'
+export type ClassType = 'LEC' | 'LAB' | 'GSLC' | 'CUSTOM'
+
+/** Repeat options available to personal ("Custom") schedules only. */
+export type CustomRepeat = 'once' | 'daily' | 'weekly' | 'biweekly'
 
 export interface ScheduleSeries {
   id: string
@@ -10,6 +13,10 @@ export interface ScheduleSeries {
   startingSession: number
   excludedDates: string[]
   createdAt: string
+  /** Only used when `type` is `CUSTOM`. */
+  repeat?: CustomRepeat
+  /** Last date a repeating custom schedule may occur on. */
+  endDate?: string
 }
 
 export interface ScheduleOccurrence {
@@ -21,6 +28,8 @@ export interface ScheduleOccurrence {
   startTime: string
   endTime: string
   sessionNumber: number
+  /** True when the parent series produces more than one occurrence. */
+  isRecurring: boolean
 }
 
 export interface ImportDraft {

@@ -1,5 +1,6 @@
 import type {
   ClassType,
+  CustomRepeat,
   FreeSlot,
   ScheduleOccurrence,
   ScheduleSeries,
@@ -12,6 +13,35 @@ export const TYPE_RULES: Record<
   LEC: { intervalDays: 7, totalSessions: 13, label: 'Weekly · 13 sessions' },
   LAB: { intervalDays: 14, totalSessions: 6, label: 'Every 2 weeks · 6 sessions' },
   GSLC: { intervalDays: 0, totalSessions: 1, label: 'One time only' },
+  CUSTOM: { intervalDays: 0, totalSessions: 1, label: 'Personal · repeats however you choose' },
+}
+
+export const CUSTOM_REPEAT_INTERVALS: Record<CustomRepeat, number> = {
+  once: 0,
+  daily: 1,
+  weekly: 7,
+  biweekly: 14,
+}
+
+export const CUSTOM_REPEAT_LABELS: Record<CustomRepeat, string> = {
+  once: 'One time only',
+  daily: 'Every day',
+  weekly: 'Every week',
+  biweekly: 'Every 2 weeks',
+}
+
+/** Default horizon for a repeating personal schedule with no chosen end date. */
+export const DEFAULT_CUSTOM_WEEKS = 12
+
+/** Hard ceiling so a repeating personal schedule can never grow without bound. */
+const MAX_CUSTOM_OCCURRENCES = 400
+
+export function isAcademicType(type: ClassType): boolean {
+  return type !== 'CUSTOM'
+}
+
+export function defaultCustomEndDate(firstDate: string): string {
+  return addDays(firstDate, DEFAULT_CUSTOM_WEEKS * 7)
 }
 
 export function makeId(): string {
@@ -60,18 +90,46 @@ export function totalSessionsFor(type: ClassType): number {
 }
 
 export function normalizeStartingSession(type: ClassType, session: number): number {
-  if (type === 'GSLC') return 1
+  if (type === 'GSLC' || type === 'CUSTOM') return 1
   return Math.min(Math.max(Math.round(session) || 1, 1), totalSessionsFor(type))
 }
 
-export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence[] {
+/** Dates for a personal schedule, bounded by its end date and a hard ceiling. */
+function customSeriesDates(series: ScheduleSeries): string[] {
+  const repeat = series.repeat ?? 'once'
+  const interval = CUSTOM_REPEAT_INTERVALS[repeat]
+  if (!interval) return [series.firstDate]
+
+  const lastDate = series.endDate || defaultCustomEndDate(series.firstDate)
+  if (lastDate < series.firstDate) return [series.firstDate]
+
+  const dates: string[] = []
+  let date = series.firstDate
+  while (date <= lastDate && dates.length < MAX_CUSTOM_OCCURRENCES) {
+    dates.push(date)
+    date = addDays(date, interval)
+  }
+  return dates
+}
+
+/** Dates for an academic class, driven by its fixed cadence and session count. */
+function academicSeriesDates(series: ScheduleSeries): string[] {
   const rule = TYPE_RULES[series.type]
   const firstSession = normalizeStartingSession(series.type, series.startingSession)
   const count = rule.totalSessions - firstSession + 1
+  return Array.from({ length: count }, (_, index) =>
+    addDays(series.firstDate, index * rule.intervalDays),
+  )
+}
 
-  return Array.from({ length: count }, (_, index) => {
-    const date = addDays(series.firstDate, index * rule.intervalDays)
-    return {
+export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence[] {
+  const dates =
+    series.type === 'CUSTOM' ? customSeriesDates(series) : academicSeriesDates(series)
+  const firstSession = normalizeStartingSession(series.type, series.startingSession)
+  const isRecurring = dates.length > 1
+
+  return dates
+    .map((date, index) => ({
       id: `${series.id}:${date}`,
       seriesId: series.id,
       name: series.name,
@@ -80,8 +138,9 @@ export function occurrencesForSeries(series: ScheduleSeries): ScheduleOccurrence
       startTime: series.startTime,
       endTime: series.endTime,
       sessionNumber: firstSession + index,
-    }
-  }).filter((occurrence) => !series.excludedDates.includes(occurrence.date))
+      isRecurring,
+    }))
+    .filter((occurrence) => !series.excludedDates.includes(occurrence.date))
 }
 
 export function getOccurrences(

@@ -1,6 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { getTodayString, normalizeStartingSession, TYPE_RULES } from '../lib/schedule'
-import type { ClassType } from '../types'
+import {
+  CUSTOM_REPEAT_LABELS,
+  defaultCustomEndDate,
+  getTodayString,
+  normalizeStartingSession,
+  TYPE_RULES,
+} from '../lib/schedule'
+import type { ClassType, CustomRepeat } from '../types'
 
 export interface ScheduleFormValues {
   name: string
@@ -9,6 +15,8 @@ export interface ScheduleFormValues {
   startTime: string
   endTime: string
   startingSession: number
+  repeat?: CustomRepeat
+  endDate?: string
 }
 
 interface ScheduleFormProps {
@@ -19,9 +27,10 @@ interface ScheduleFormProps {
 }
 
 const TYPE_COPY: Record<ClassType, { title: string; short: string }> = {
-  LEC: { title: 'LEC', short: 'Weekly' },
-  LAB: { title: 'LAB', short: 'Every 2 weeks' },
+  LEC: { title: 'LEC', short: 'Weekly · 13' },
+  LAB: { title: 'LAB', short: '2 weeks · 6' },
   GSLC: { title: 'GSLC', short: 'One time' },
+  CUSTOM: { title: 'Custom', short: 'My own' },
 }
 
 export function ScheduleForm({
@@ -36,28 +45,41 @@ export function ScheduleForm({
   const [startTime, setStartTime] = useState(initial?.startTime ?? '09:00')
   const [endTime, setEndTime] = useState(initial?.endTime ?? '10:40')
   const [startingSession, setStartingSession] = useState(initial?.startingSession ?? 1)
+  const [repeat, setRepeat] = useState<CustomRepeat>(initial?.repeat ?? 'weekly')
+  const [endDate, setEndDate] = useState(initial?.endDate ?? '')
   const [error, setError] = useState('')
 
+  const isCustom = type === 'CUSTOM'
   const rule = TYPE_RULES[type]
+  const effectiveEndDate = endDate || defaultCustomEndDate(firstDate)
+
   const recurrenceText = useMemo(() => {
+    if (isCustom) {
+      if (repeat === 'once') return 'This personal schedule is saved only on the selected date.'
+      return `${CUSTOM_REPEAT_LABELS[repeat]} from the selected date until ${effectiveEndDate}. No class sessions are counted.`
+    }
     if (type === 'GSLC') return 'This is saved only on the selected date.'
     const remaining = rule.totalSessions - normalizeStartingSession(type, startingSession) + 1
     return `${rule.label}. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added.`
-  }, [rule, startingSession, type])
+  }, [effectiveEndDate, isCustom, repeat, rule, startingSession, type])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const cleanName = name.trim()
     if (!cleanName) {
-      setError('Enter the mata kuliah name.')
+      setError(isCustom ? 'Enter a name for this schedule.' : 'Enter the mata kuliah name.')
       return
     }
     if (!firstDate) {
-      setError('Choose the date of this session.')
+      setError('Choose the date of this schedule.')
       return
     }
     if (!startTime || !endTime || endTime <= startTime) {
       setError('End time must be after start time.')
+      return
+    }
+    if (isCustom && repeat !== 'once' && endDate && endDate < firstDate) {
+      setError('The repeat end date cannot be before the start date.')
       return
     }
 
@@ -68,25 +90,31 @@ export function ScheduleForm({
       startTime,
       endTime,
       startingSession: normalizeStartingSession(type, startingSession),
+      ...(isCustom
+        ? {
+            repeat,
+            ...(repeat === 'once' ? {} : { endDate: effectiveEndDate }),
+          }
+        : {}),
     })
   }
 
   return (
     <form className="form-stack" onSubmit={handleSubmit}>
       <label className="field">
-        <span>Mata kuliah</span>
+        <span>{isCustom ? 'Schedule name' : 'Mata kuliah'}</span>
         <input
           autoFocus
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="e.g. Computer Networks"
+          placeholder={isCustom ? 'e.g. Gym, Work shift, Organization' : 'e.g. Computer Networks'}
           autoComplete="off"
         />
       </label>
 
       <fieldset className="field type-picker">
-        <legend>Class type</legend>
-        <div className="segmented-control">
+        <legend>Type</legend>
+        <div className="segmented-control segmented-control--quad">
           {(Object.keys(TYPE_COPY) as ClassType[]).map((option) => (
             <button
               className={type === option ? 'is-active' : ''}
@@ -94,7 +122,7 @@ export function ScheduleForm({
               type="button"
               onClick={() => {
                 setType(option)
-                if (option === 'GSLC') setStartingSession(1)
+                if (option === 'GSLC' || option === 'CUSTOM') setStartingSession(1)
               }}
             >
               <strong>{TYPE_COPY[option].title}</strong>
@@ -105,7 +133,7 @@ export function ScheduleForm({
       </fieldset>
 
       <label className="field">
-        <span>{type === 'GSLC' ? 'Date' : 'Date of this session'}</span>
+        <span>{type === 'GSLC' || (isCustom && repeat === 'once') ? 'Date' : isCustom ? 'Starting date' : 'Date of this session'}</span>
         <input type="date" value={firstDate} onChange={(event) => setFirstDate(event.target.value)} />
       </label>
 
@@ -120,7 +148,33 @@ export function ScheduleForm({
         </label>
       </div>
 
-      {type !== 'GSLC' && (
+      {isCustom && (
+        <label className="field">
+          <span>Repeat</span>
+          <select
+            value={repeat}
+            onChange={(event) => setRepeat(event.target.value as CustomRepeat)}
+          >
+            {(Object.keys(CUSTOM_REPEAT_LABELS) as CustomRepeat[]).map((option) => (
+              <option value={option} key={option}>{CUSTOM_REPEAT_LABELS[option]}</option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {isCustom && repeat !== 'once' && (
+        <label className="field">
+          <span>Repeat until</span>
+          <input
+            type="date"
+            min={firstDate}
+            value={effectiveEndDate}
+            onChange={(event) => setEndDate(event.target.value)}
+          />
+        </label>
+      )}
+
+      {!isCustom && type !== 'GSLC' && (
         <label className="field">
           <span>Session on this date</span>
           <select

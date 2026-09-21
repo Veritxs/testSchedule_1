@@ -93,6 +93,8 @@ function App() {
       startingSession: values.startingSession,
       excludedDates: [],
       createdAt: new Date().toISOString(),
+      ...(values.repeat ? { repeat: values.repeat } : {}),
+      ...(values.endDate ? { endDate: values.endDate } : {}),
     }
     setSeries((current) => [...current, schedule])
     setSelectedDate(values.firstDate)
@@ -263,15 +265,19 @@ function App() {
                 <span>{formatLongDate(deleteTarget.date)} · {deleteTarget.startTime}–{deleteTarget.endTime}</span>
               </div>
             </div>
-            {deleteTarget.type !== 'GSLC' && (
+            {deleteTarget.isRecurring && (
               <button className="delete-option" type="button" onClick={removeOccurrence}>
                 <strong>Remove this occurrence</strong>
-                <span>Keep the rest of the recurring schedule</span>
+                <span>Keep the rest of the repeating schedule</span>
               </button>
             )}
             <button className="delete-option delete-option--danger" type="button" onClick={removeSeries}>
-              <strong>{deleteTarget.type === 'GSLC' ? 'Remove schedule' : 'Remove entire series'}</strong>
-              <span>{deleteTarget.type === 'GSLC' ? 'Delete this one-time class' : 'Delete all remaining sessions'}</span>
+              <strong>{deleteTarget.isRecurring ? 'Remove entire series' : 'Remove schedule'}</strong>
+              <span>
+                {deleteTarget.isRecurring
+                  ? 'Delete every remaining occurrence'
+                  : 'Delete this one-time schedule'}
+              </span>
             </button>
             <button className="button button--ghost button--full" type="button" onClick={() => setDeleteTarget(null)}>Cancel</button>
           </div>

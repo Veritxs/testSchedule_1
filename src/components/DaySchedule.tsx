@@ -11,6 +11,15 @@ const TYPE_LABEL: Record<ScheduleOccurrence['type'], string> = {
   LEC: 'Lecture',
   LAB: 'Lab',
   GSLC: 'GSLC',
+  CUSTOM: 'Personal',
+}
+
+function describeOccurrence(occurrence: ScheduleOccurrence): string {
+  const label = TYPE_LABEL[occurrence.type]
+  if (occurrence.type === 'CUSTOM') {
+    return occurrence.isRecurring ? `${label} · repeating` : label
+  }
+  return `${label} · Session ${occurrence.sessionNumber}`
 }
 
 export function DaySchedule({ occurrences, freeSlots, onDelete }: DayScheduleProps) {
@@ -41,7 +50,7 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
                 </div>
                 <div className="schedule-detail">
                   <h3>{occurrence.name}</h3>
-                  <p>{TYPE_LABEL[occurrence.type]} · Session {occurrence.sessionNumber}</p>
+                  <p>{describeOccurrence(occurrence)}</p>
                 </div>
                 <button
                   className="more-button"
