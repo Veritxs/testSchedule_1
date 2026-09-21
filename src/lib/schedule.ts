@@ -90,8 +90,9 @@ export function getTodayString(): string {
  * on the course name so OCR spacing and casing differences still count.
  */
 export const COURSE_SESSION_OVERRIDES: Array<{ match: string; totalSessions: number }> = [
-  { match: 'algorithm design', totalSessions: 32 },
-  { match: 'artificial intelligence', totalSessions: 32 },
+  // Two sessions per week across the usual 13 weeks.
+  { match: 'algorithm design', totalSessions: 26 },
+  { match: 'artificial intelligence', totalSessions: 26 },
 ]
 
 export function totalSessionsFor(type: ClassType, name?: string): number {
