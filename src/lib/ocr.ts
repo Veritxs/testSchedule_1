@@ -1,5 +1,7 @@
 import { createWorker, PSM } from 'tesseract.js'
-import engDataUrl from '@tesseract.js-data/eng/4.0.0/eng.traineddata.gz?url'
+import engDataUrl from '@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz?url'
+import workerUrl from 'tesseract.js/dist/worker.min.js?url'
+import coreUrl from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url'
 import { makeId, normalizeStartingSession, toLocalDateString } from './schedule'
 import type { ClassType, ImportDraft } from '../types'
 
@@ -136,7 +138,9 @@ async function imageToHighContrastCanvas(file: File): Promise<HTMLCanvasElement>
       image.src = objectUrl
     })
 
-    const targetWidth = Math.min(Math.max(image.naturalWidth, 1400), 2200)
+    // Keep memory use predictable on iPhones while retaining enough detail for
+    // the relatively large text in campus schedule screenshots.
+    const targetWidth = Math.min(Math.max(image.naturalWidth, 1200), 1800)
     const scale = targetWidth / image.naturalWidth
     const canvas = document.createElement('canvas')
     canvas.width = Math.round(image.naturalWidth * scale)
@@ -188,10 +192,15 @@ export async function recognizeScheduleImage(
   if (!languageResponse.ok) throw new Error('The offline text reader could not be loaded.')
   const languageData = new Uint8Array(await languageResponse.arrayBuffer())
 
-  const worker = await createWorker(
+  const workerPromise = createWorker(
     [{ code: 'eng', data: languageData }],
     undefined,
     {
+      // Self-hosting the worker and non-SIMD core avoids cross-origin worker
+      // loading failures in iOS Safari and allows importing after installation.
+      workerPath: workerUrl,
+      workerBlobURL: false,
+      corePath: coreUrl,
       logger: (message) => {
         if (message.status === 'recognizing text') {
           onProgress(0.15 + message.progress * 0.85, 'Reading your screenshot…')
@@ -201,6 +210,16 @@ export async function recognizeScheduleImage(
       },
     },
   )
+  let startupTimeout = 0
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    startupTimeout = window.setTimeout(
+      () => reject(new Error('The text reader took too long to start. Close the app, reopen it, and try again.')),
+      45_000,
+    )
+  })
+  const worker = await Promise.race([workerPromise, timeoutPromise]).finally(() => {
+    window.clearTimeout(startupTimeout)
+  })
 
   try {
     await worker.setParameters({
