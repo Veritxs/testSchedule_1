@@ -179,7 +179,7 @@ function App() {
         </button>
       </header>
 
-      <main className="main-content">
+      <main className={`main-content${view === 'grid' ? ' main-content--grid' : ''}`}>
         <section className="hero">
           <div className="view-switcher view-switcher--triple" aria-label="Timetable view">
             <button className={view === 'today' ? 'is-active' : ''} type="button" onClick={showToday}>Today</button>
@@ -213,6 +213,7 @@ function App() {
           )}
         </section>
 
+        {/* The grid needs every pixel it can get for 7 day columns. */}
         {view === 'grid' ? (
           <WeekGrid
             weekDays={weekDays}
