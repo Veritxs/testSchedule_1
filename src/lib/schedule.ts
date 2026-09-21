@@ -160,6 +160,90 @@ export function getOccurrences(
     )
 }
 
+export interface SeriesInput {
+  name: string
+  type: ClassType
+  firstDate: string
+  startTime: string
+  endTime: string
+  startingSession: number
+  repeat?: CustomRepeat
+  endDate?: string
+}
+
+export interface DuplicateMatch {
+  name: string
+  date: string
+  startTime: string
+  endTime: string
+}
+
+export function createSeries(input: SeriesInput): ScheduleSeries {
+  return {
+    id: makeId(),
+    name: input.name,
+    type: input.type,
+    firstDate: input.firstDate,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    startingSession: normalizeStartingSession(input.type, input.startingSession),
+    excludedDates: [],
+    createdAt: new Date().toISOString(),
+    ...(input.repeat ? { repeat: input.repeat } : {}),
+    ...(input.endDate ? { endDate: input.endDate } : {}),
+  }
+}
+
+/** Loose name comparison so OCR spacing/casing differences still match. */
+export function normalizeScheduleName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function timesOverlap(
+  left: { startTime: string; endTime: string },
+  right: { startTime: string; endTime: string },
+): boolean {
+  return (
+    minutesFromTime(left.startTime) < minutesFromTime(right.endTime) &&
+    minutesFromTime(right.startTime) < minutesFromTime(left.endTime)
+  )
+}
+
+/**
+ * Returns the first occurrence of `candidate` that already exists in `existing`.
+ * A clash counts as a duplicate only when the names match, so two different
+ * courses sharing a time slot are still allowed.
+ */
+export function findDuplicateOccurrence(
+  candidate: ScheduleSeries,
+  existing: ScheduleSeries[],
+): DuplicateMatch | null {
+  const candidateName = normalizeScheduleName(candidate.name)
+  const sameNamed = existing.filter(
+    (series) =>
+      series.id !== candidate.id && normalizeScheduleName(series.name) === candidateName,
+  )
+  if (!sameNamed.length) return null
+
+  const existingOccurrences = sameNamed.flatMap(occurrencesForSeries)
+
+  for (const occurrence of occurrencesForSeries(candidate)) {
+    const clash = existingOccurrences.find(
+      (other) => other.date === occurrence.date && timesOverlap(occurrence, other),
+    )
+    if (clash) {
+      return {
+        name: clash.name,
+        date: clash.date,
+        startTime: clash.startTime,
+        endTime: clash.endTime,
+      }
+    }
+  }
+
+  return null
+}
+
 export function minutesFromTime(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes

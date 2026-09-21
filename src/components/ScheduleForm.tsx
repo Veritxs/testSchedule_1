@@ -24,6 +24,8 @@ interface ScheduleFormProps {
   onCancel: () => void
   initial?: Partial<ScheduleFormValues>
   submitLabel?: string
+  /** Message from the parent, e.g. when the schedule already exists. */
+  externalError?: string
 }
 
 const TYPE_COPY: Record<ClassType, { title: string; short: string }> = {
@@ -38,6 +40,7 @@ export function ScheduleForm({
   onCancel,
   initial,
   submitLabel = 'Add schedule',
+  externalError = '',
 }: ScheduleFormProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [type, setType] = useState<ClassType>(initial?.type ?? 'LEC')
@@ -189,7 +192,9 @@ export function ScheduleForm({
       )}
 
       <p className="form-hint">{recurrenceText}</p>
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {(error || externalError) && (
+        <p className="form-error" role="alert">{error || externalError}</p>
+      )}
 
       <div className="form-actions">
         <button className="button button--ghost" type="button" onClick={onCancel}>Cancel</button>

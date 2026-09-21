@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { DaySchedule } from './components/DaySchedule'
 import { Modal } from './components/Modal'
 import { ScheduleForm, type ScheduleFormValues } from './components/ScheduleForm'
-import { ScreenshotImport } from './components/ScreenshotImport'
+import { ScreenshotImport, type ImportOutcome } from './components/ScreenshotImport'
 import { SettingsForm } from './components/SettingsForm'
 import {
   addDays,
   calculateFreeSlots,
+  createSeries,
+  findDuplicateOccurrence,
   formatLongDate,
   formatShortDate,
   formatWeekday,
   getOccurrences,
   getTodayString,
   getWeekDays,
-  makeId,
   parseLocalDate,
   startOfWeek,
 } from './lib/schedule'
@@ -36,6 +37,7 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(today)
   const [openModal, setOpenModal] = useState<OpenModal>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduleOccurrence | null>(null)
+  const [addError, setAddError] = useState('')
   const [toast, setToast] = useState('')
 
   useEffect(() => saveSchedules(series), [series])
@@ -84,41 +86,47 @@ function App() {
   }
 
   function addSchedule(values: ScheduleFormValues) {
-    const schedule: ScheduleSeries = {
-      id: makeId(),
-      name: values.name,
-      type: values.type,
-      firstDate: values.firstDate,
-      startTime: values.startTime,
-      endTime: values.endTime,
-      startingSession: values.startingSession,
-      excludedDates: [],
-      createdAt: new Date().toISOString(),
-      ...(values.repeat ? { repeat: values.repeat } : {}),
-      ...(values.endDate ? { endDate: values.endDate } : {}),
+    const candidate = createSeries(values)
+    const duplicate = findDuplicateOccurrence(candidate, series)
+    if (duplicate) {
+      setAddError(
+        `“${duplicate.name}” is already in your timetable on ${formatLongDate(duplicate.date)} at ${duplicate.startTime}–${duplicate.endTime}, so nothing was added.`,
+      )
+      return
     }
-    setSeries((current) => [...current, schedule])
+
+    setAddError('')
+    setSeries((current) => [...current, candidate])
     setSelectedDate(values.firstDate)
     setOpenModal(null)
     setToast(`${values.name} added`)
   }
 
-  function importSchedules(drafts: ImportDraft[]) {
-    const imported: ScheduleSeries[] = drafts.map((draft) => ({
-      id: makeId(),
-      name: draft.name,
-      type: draft.type,
-      firstDate: draft.date,
-      startTime: draft.startTime,
-      endTime: draft.endTime,
-      startingSession: draft.startingSession,
-      excludedDates: [],
-      createdAt: new Date().toISOString(),
-    }))
-    setSeries((current) => [...current, ...imported])
-    setSelectedDate(drafts[0].date)
+  function importSchedules(drafts: ImportDraft[]): ImportOutcome {
+    const accepted: ScheduleSeries[] = []
+    const skipped: Array<{ name: string; date: string }> = []
+
+    for (const draft of drafts) {
+      const candidate = createSeries({ ...draft, firstDate: draft.date })
+      const duplicate = findDuplicateOccurrence(candidate, [...series, ...accepted])
+      if (duplicate) {
+        skipped.push({ name: duplicate.name, date: duplicate.date })
+      } else {
+        accepted.push(candidate)
+      }
+    }
+
+    if (!accepted.length) return { importedCount: 0, skipped }
+
+    setSeries((current) => [...current, ...accepted])
+    setSelectedDate(accepted[0].firstDate)
     setOpenModal(null)
-    setToast(`${drafts.length} class${drafts.length === 1 ? '' : 'es'} imported`)
+    setToast(
+      skipped.length
+        ? `${accepted.length} imported · ${skipped.length} already existed`
+        : `${accepted.length} class${accepted.length === 1 ? '' : 'es'} imported`,
+    )
+    return { importedCount: accepted.length, skipped }
   }
 
   function removeOccurrence() {
@@ -218,7 +226,15 @@ function App() {
           <span aria-hidden="true">▣</span>
           <small>Import</small>
         </button>
-        <button className="add-button" type="button" onClick={() => setOpenModal('add')} aria-label="Add a schedule">
+        <button
+          className="add-button"
+          type="button"
+          onClick={() => {
+            setAddError('')
+            setOpenModal('add')
+          }}
+          aria-label="Add a schedule"
+        >
           <span aria-hidden="true">＋</span>
         </button>
         <button className="nav-item" type="button" onClick={showWeek}>
@@ -235,6 +251,7 @@ function App() {
         <Modal title="Add schedule" onClose={() => setOpenModal(null)}>
           <ScheduleForm
             initial={{ firstDate: selectedDate }}
+            externalError={addError}
             onSave={addSchedule}
             onCancel={() => setOpenModal(null)}
           />

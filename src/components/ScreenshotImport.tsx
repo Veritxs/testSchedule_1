@@ -3,8 +3,13 @@ import { getTodayString, makeId, normalizeStartingSession, TYPE_RULES } from '..
 import { recognizeScheduleImage } from '../lib/ocr'
 import type { ClassType, ImportDraft } from '../types'
 
+export interface ImportOutcome {
+  importedCount: number
+  skipped: Array<{ name: string; date: string }>
+}
+
 interface ScreenshotImportProps {
-  onImport: (drafts: ImportDraft[]) => void
+  onImport: (drafts: ImportDraft[]) => ImportOutcome
   onCancel: () => void
 }
 
@@ -101,7 +106,14 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
       setError('Complete at least one class with a name, date, and valid time.')
       return
     }
-    onImport(valid.map((draft) => ({ ...draft, name: draft.name.trim() })))
+
+    const outcome = onImport(valid.map((draft) => ({ ...draft, name: draft.name.trim() })))
+    if (outcome.importedCount === 0) {
+      const names = Array.from(new Set(outcome.skipped.map((item) => item.name))).join(', ')
+      setError(
+        `Nothing was added. ${names} already exists in your timetable at the same time, so it was skipped.`,
+      )
+    }
   }
 
   if (!hasScanned) {
