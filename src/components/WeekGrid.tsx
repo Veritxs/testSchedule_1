@@ -16,6 +16,7 @@ interface WeekGridProps {
   selectedDate: string
   onSelectDate: (date: string) => void
   onSelectEntry: (entry: ScheduleEntry) => void
+  readOnly?: boolean
 }
 
 const PIXELS_PER_MINUTE = 1
@@ -52,6 +53,7 @@ export function WeekGrid({
   selectedDate,
   onSelectDate,
   onSelectEntry,
+  readOnly = false,
 }: WeekGridProps) {
   const startMinutes = Math.min(
     minutesFromTime(dayStart),
@@ -172,7 +174,9 @@ export function WeekGrid({
         <span><i className="gslc" />GSLC</span>
         <span><i className="custom" />Personal</span>
       </div>
-      <p className="grid-hint">Tap a block to remove it, or tap a date to open that day.</p>
+      {!readOnly && (
+        <p className="grid-hint">Tap a block to remove it, or tap a date to open that day.</p>
+      )}
     </section>
   )
 }

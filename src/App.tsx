@@ -5,6 +5,9 @@ import { ScheduleForm, type ScheduleFormValues } from './components/ScheduleForm
 import { ScreenshotImport, type ImportOutcome } from './components/ScreenshotImport'
 import { SettingsForm } from './components/SettingsForm'
 import { WeekGrid } from './components/WeekGrid'
+import { ExportSheet } from './components/ExportSheet'
+import { SharedWeekView } from './components/SharedWeekView'
+import { readSharedWeekFromHash } from './lib/share'
 import {
   addDays,
   applyEntry,
@@ -28,9 +31,15 @@ import {
 import type { ImportDraft, ScheduleEntry } from './types'
 
 type ViewMode = 'today' | 'week' | 'grid'
-type OpenModal = 'add' | 'import' | 'settings' | 'removeAll' | null
+type OpenModal = 'add' | 'import' | 'settings' | 'removeAll' | 'export' | null
 
 function App() {
+  const sharedWeek = useMemo(() => readSharedWeekFromHash(), [])
+  if (sharedWeek) return <SharedWeekView shared={sharedWeek} />
+  return <MainApp />
+}
+
+function MainApp() {
   const today = getTodayString()
   const [entries, setEntries] = useState<ScheduleEntry[]>(loadEntries)
   const [preferences, setPreferences] = useState(loadPreferences)
@@ -193,9 +202,14 @@ function App() {
             <span>My campus rhythm</span>
           </div>
         </div>
-        <button className="avatar-button" type="button" onClick={() => setOpenModal('settings')} aria-label="Open settings">
-          <span aria-hidden="true">⚙</span>
-        </button>
+        <div className="topbar-actions">
+          <button className="avatar-button" type="button" onClick={() => setOpenModal('export')} aria-label="Share this week">
+            <span aria-hidden="true">↗</span>
+          </button>
+          <button className="avatar-button" type="button" onClick={() => setOpenModal('settings')} aria-label="Open settings">
+            <span aria-hidden="true">⚙</span>
+          </button>
+        </div>
       </header>
 
       <main className={`main-content${view === 'grid' ? ' main-content--grid' : ''}`}>
@@ -298,6 +312,20 @@ function App() {
           <ScreenshotImport
             onImport={importSchedules}
             onCancel={() => setOpenModal(null)}
+          />
+        </Modal>
+      )}
+
+      {openModal === 'export' && (
+        <Modal title="Share this week" onClose={() => setOpenModal(null)}>
+          <ExportSheet
+            entries={weekEntries}
+            weekDays={weekDays}
+            weekStart={weekStart}
+            weekLabel={weekRangeLabel}
+            dayStart={preferences.dayStart}
+            dayEnd={preferences.dayEnd}
+            onClose={() => setOpenModal(null)}
           />
         </Modal>
       )}

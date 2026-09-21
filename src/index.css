@@ -448,3 +448,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   .week-grid__event strong { font-size: 10px; }
   .week-grid__event span { font-size: 8.5px; }
 }
+
+
+/* Export / share */
+.topbar-actions { display: flex; gap: 8px; }
+.hero--shared { padding: 14px 16px; }
+.shared-note { margin: 0; color: rgba(255, 255, 255, 0.82); font-size: 12px; line-height: 1.5; }
+.export-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.share-url { width: 100%; height: 40px; padding: 0 11px; overflow: hidden; border: 1px solid #dcd8cf; border-radius: 11px; color: var(--muted); background: #f4f1ea; font-size: 11px; text-overflow: ellipsis; }
+.export-status { margin: 0; padding: 10px 12px; border-radius: 11px; color: #305c48; background: #edf6f0; font-size: 12px; line-height: 1.45; }
+.make-own { margin-top: 14px; text-align: center; text-decoration: none; line-height: 48px; }
