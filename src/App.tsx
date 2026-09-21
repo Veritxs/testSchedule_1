@@ -93,23 +93,42 @@ function App() {
   }
 
   function addSchedule(values: ScheduleFormValues) {
-    const result = applyEntry(entries, createEntry(values))
-    if (result.status === 'duplicate' && result.duplicate) {
+    const targetDates = values.dates.length ? values.dates : [values.date]
+    let working = entries
+    let added = 0
+    let replaced = 0
+    const skippedDates: string[] = []
+
+    for (const date of targetDates) {
+      const result = applyEntry(working, createEntry({ ...values, date }))
+      if (result.status === 'duplicate') {
+        skippedDates.push(date)
+        continue
+      }
+      working = result.entries
+      if (result.status === 'replaced') replaced += 1
+      else added += 1
+    }
+
+    if (!added && !replaced) {
       setAddError(
-        `“${result.duplicate.name}” is already saved on ${formatLongDate(result.duplicate.date)} at ${result.duplicate.startTime}–${result.duplicate.endTime}, so nothing was added.`,
+        targetDates.length === 1
+          ? `“${values.name}” is already saved on ${formatLongDate(values.date)} at ${values.startTime}–${values.endTime}, so nothing was added.`
+          : `Every one of those ${targetDates.length} dates already has “${values.name}” at ${values.startTime}–${values.endTime}, so nothing was added.`,
       )
       return
     }
 
     setAddError('')
-    setEntries(result.entries)
+    setEntries(working)
     setSelectedDate(values.date)
     setOpenModal(null)
-    setToast(
-      result.status === 'replaced'
-        ? `${values.name} replaced the lecture on this date`
-        : `${values.name} added`,
-    )
+
+    const parts: string[] = []
+    if (added) parts.push(`${added} date${added === 1 ? '' : 's'} added`)
+    if (replaced) parts.push(`${replaced} replaced a lecture`)
+    if (skippedDates.length) parts.push(`${skippedDates.length} already existed`)
+    setToast(`${values.name}: ${parts.join(' · ')}`)
   }
 
   function importSchedules(drafts: ImportDraft[]): ImportOutcome {

@@ -64,6 +64,53 @@ export function normalizeSessionNumber(value: unknown): number | undefined {
   return Math.min(parsed, MAX_SESSION_NUMBER)
 }
 
+export type RepeatOption = 'none' | 'daily' | 'weekly' | 'biweekly'
+
+export const REPEAT_LABELS: Record<RepeatOption, string> = {
+  none: 'Does not repeat',
+  daily: 'Every day',
+  weekly: 'Every week',
+  biweekly: 'Every 2 weeks',
+}
+
+const REPEAT_INTERVALS: Record<RepeatOption, number> = {
+  none: 0,
+  daily: 1,
+  weekly: 7,
+  biweekly: 14,
+}
+
+/** Hard ceiling so one save can never create an unbounded pile of entries. */
+export const MAX_REPEAT_DATES = 60
+
+/**
+ * Expands a chosen repeat into the list of dates to create. Each date becomes its
+ * own independent entry, so nothing repeats behind your back afterwards.
+ */
+export function repeatDates(
+  startDate: string,
+  repeat: RepeatOption,
+  untilDate?: string,
+): string[] {
+  const interval = REPEAT_INTERVALS[repeat]
+  if (!interval) return [startDate]
+
+  const lastDate = untilDate && untilDate >= startDate ? untilDate : startDate
+  const dates: string[] = []
+  let date = startDate
+  while (date <= lastDate && dates.length < MAX_REPEAT_DATES) {
+    dates.push(date)
+    date = addDays(date, interval)
+  }
+  return dates
+}
+
+export function defaultRepeatUntil(startDate: string, repeat: RepeatOption): string {
+  if (repeat === 'daily') return addDays(startDate, 6)
+  if (repeat === 'biweekly') return addDays(startDate, 70)
+  return addDays(startDate, 35)
+}
+
 export interface EntryInput {
   name: string
   type: ClassType

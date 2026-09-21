@@ -1,5 +1,14 @@
-import { useState, type FormEvent } from 'react'
-import { getTodayString, normalizeSessionNumber } from '../lib/schedule'
+import { useMemo, useState, type FormEvent } from 'react'
+import {
+  defaultRepeatUntil,
+  formatShortDate,
+  getTodayString,
+  MAX_REPEAT_DATES,
+  normalizeSessionNumber,
+  repeatDates,
+  REPEAT_LABELS,
+  type RepeatOption,
+} from '../lib/schedule'
 import type { ClassType } from '../types'
 
 export interface ScheduleFormValues {
@@ -9,6 +18,8 @@ export interface ScheduleFormValues {
   startTime: string
   endTime: string
   sessionNumber?: number
+  /** Dates to create, already expanded from the chosen repeat. */
+  dates: string[]
 }
 
 interface ScheduleFormProps {
@@ -42,9 +53,17 @@ export function ScheduleForm({
   const [session, setSession] = useState(
     initial?.sessionNumber ? String(initial.sessionNumber) : '',
   )
+  const [repeat, setRepeat] = useState<RepeatOption>('none')
+  const [repeatUntil, setRepeatUntil] = useState('')
   const [error, setError] = useState('')
 
   const isCustom = type === 'CUSTOM'
+  const effectiveUntil = repeatUntil || defaultRepeatUntil(date, repeat)
+  const dates = useMemo(
+    () => (date ? repeatDates(date, repeat, effectiveUntil) : []),
+    [date, effectiveUntil, repeat],
+  )
+  const previewDates = dates.slice(0, 4).map(formatShortDate).join(', ')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -62,6 +81,11 @@ export function ScheduleForm({
       return
     }
 
+    if (repeat !== 'none' && repeatUntil && repeatUntil < date) {
+      setError('The repeat end date cannot be before the start date.')
+      return
+    }
+
     onSave({
       name: cleanName,
       type,
@@ -69,6 +93,7 @@ export function ScheduleForm({
       startTime,
       endTime,
       sessionNumber: isCustom ? undefined : normalizeSessionNumber(session),
+      dates,
     })
   }
 
@@ -133,9 +158,37 @@ export function ScheduleForm({
         </label>
       )}
 
+      <label className="field">
+        <span>Repeat</span>
+        <select
+          value={repeat}
+          onChange={(event) => {
+            setRepeat(event.target.value as RepeatOption)
+            setRepeatUntil('')
+          }}
+        >
+          {(Object.keys(REPEAT_LABELS) as RepeatOption[]).map((option) => (
+            <option value={option} key={option}>{REPEAT_LABELS[option]}</option>
+          ))}
+        </select>
+      </label>
+
+      {repeat !== 'none' && (
+        <label className="field">
+          <span>Repeat until</span>
+          <input
+            type="date"
+            min={date}
+            value={effectiveUntil}
+            onChange={(event) => setRepeatUntil(event.target.value)}
+          />
+        </label>
+      )}
+
       <p className="form-hint">
-        Saved on {date || 'the chosen date'} only. Nothing repeats automatically, so add each
-        class on the date it actually happens.
+        {repeat === 'none'
+          ? `Saved on ${date || 'the chosen date'} only. Nothing repeats unless you choose a repeat above.`
+          : `Creates ${dates.length} separate entr${dates.length === 1 ? 'y' : 'ies'}: ${previewDates}${dates.length > 4 ? '…' : ''}. Each one can be removed on its own${dates.length >= MAX_REPEAT_DATES ? `, and a single save adds at most ${MAX_REPEAT_DATES}` : ''}.`}
       </p>
       {(error || externalError) && (
         <p className="form-error" role="alert">{error || externalError}</p>
