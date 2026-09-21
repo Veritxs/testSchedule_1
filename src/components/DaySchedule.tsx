@@ -25,7 +25,11 @@ function describeOccurrence(occurrence: ScheduleOccurrence): string {
   if (occurrence.type === 'CUSTOM') {
     return occurrence.isRecurring ? 'Repeating' : 'One time'
   }
-  if (occurrence.type === 'GSLC') return `Replaces Session ${occurrence.sessionNumber}`
+  if (occurrence.type === 'GSLC') {
+    return occurrence.replacesLecture
+      ? `Replaces Session ${occurrence.sessionNumber}`
+      : `Session ${occurrence.sessionNumber}`
+  }
   return `${TYPE_LABEL[occurrence.type]} · Session ${occurrence.sessionNumber}`
 }
 

@@ -17,6 +17,8 @@ export interface ScheduleSeries {
   repeat?: CustomRepeat
   /** Last date a repeating custom schedule may occur on. */
   endDate?: string
+  /** True when this GSLC was imported in place of a lecture session. */
+  replacesLecture?: boolean
 }
 
 export interface ScheduleOccurrence {
@@ -30,6 +32,8 @@ export interface ScheduleOccurrence {
   sessionNumber: number
   /** True when the parent series produces more than one occurrence. */
   isRecurring: boolean
+  /** True when this GSLC stands in for a lecture session. */
+  replacesLecture?: boolean
 }
 
 export interface ImportDraft {

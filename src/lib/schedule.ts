@@ -181,6 +181,7 @@ function academicGroupOccurrences(group: ScheduleSeries[]): ScheduleOccurrence[]
       endTime: item.series.endTime,
       sessionNumber: firstSession + index,
       isRecurring: (countsBySeries.get(item.series.id) ?? 0) > 1,
+      replacesLecture: item.series.replacesLecture,
     }))
     .filter((occurrence) => {
       const series = group.find((item) => item.id === occurrence.seriesId)
@@ -381,6 +382,7 @@ export function applySeries(
       const gslc: ScheduleSeries = {
         ...candidate,
         startingSession: replacedOccurrence.sessionNumber,
+        replacesLecture: true,
       }
       const duplicate = findDuplicateOccurrence(gslc, updated)
       if (duplicate) return { series: existing, status: 'duplicate', duplicate }
