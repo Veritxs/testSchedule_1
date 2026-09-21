@@ -4,7 +4,7 @@ import {
   defaultCustomEndDate,
   getTodayString,
   normalizeStartingSession,
-  TYPE_RULES,
+  totalSessionsFor,
 } from '../lib/schedule'
 import type { ClassType, CustomRepeat } from '../types'
 
@@ -53,7 +53,7 @@ export function ScheduleForm({
   const [error, setError] = useState('')
 
   const isCustom = type === 'CUSTOM'
-  const rule = TYPE_RULES[type]
+  const totalSessions = totalSessionsFor(type, name)
   const effectiveEndDate = endDate || defaultCustomEndDate(firstDate)
 
   const recurrenceText = useMemo(() => {
@@ -62,9 +62,11 @@ export function ScheduleForm({
       return `${CUSTOM_REPEAT_LABELS[repeat]} from the selected date until ${effectiveEndDate}. No class sessions are counted.`
     }
     if (type === 'GSLC') return 'This is saved only on the selected date.'
-    const remaining = rule.totalSessions - normalizeStartingSession(type, startingSession) + 1
-    return `${rule.label}. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added. If this mata kuliah has another slot of the same type, they share the remaining sessions and the numbering continues across both.`
-  }, [effectiveEndDate, isCustom, repeat, rule, startingSession, type])
+    const cadence = type === 'LAB' ? 'Every 2 weeks' : 'Weekly'
+    const remaining =
+      totalSessions - normalizeStartingSession(type, startingSession, name) + 1
+    return `${cadence} · ${totalSessions} sessions. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added. If this mata kuliah has another slot of the same type, they share the remaining sessions and the numbering continues across both.`
+  }, [effectiveEndDate, isCustom, name, repeat, startingSession, totalSessions, type])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -92,7 +94,7 @@ export function ScheduleForm({
       firstDate,
       startTime,
       endTime,
-      startingSession: normalizeStartingSession(type, startingSession),
+      startingSession: normalizeStartingSession(type, startingSession, cleanName),
       ...(isCustom
         ? {
             repeat,
@@ -184,7 +186,7 @@ export function ScheduleForm({
             value={startingSession}
             onChange={(event) => setStartingSession(Number(event.target.value))}
           >
-            {Array.from({ length: rule.totalSessions }, (_, index) => index + 1).map((session) => (
+            {Array.from({ length: totalSessions }, (_, index) => index + 1).map((session) => (
               <option value={session} key={session}>Session {session}</option>
             ))}
           </select>

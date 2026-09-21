@@ -14,12 +14,19 @@ const TYPE_LABEL: Record<ScheduleOccurrence['type'], string> = {
   CUSTOM: 'Personal',
 }
 
+const TYPE_BADGE: Record<ScheduleOccurrence['type'], string> = {
+  LEC: 'LEC',
+  LAB: 'LAB',
+  GSLC: 'GSLC',
+  CUSTOM: 'PERSONAL',
+}
+
 function describeOccurrence(occurrence: ScheduleOccurrence): string {
-  const label = TYPE_LABEL[occurrence.type]
   if (occurrence.type === 'CUSTOM') {
-    return occurrence.isRecurring ? `${label} · repeating` : label
+    return occurrence.isRecurring ? 'Repeating' : 'One time'
   }
-  return `${label} · Session ${occurrence.sessionNumber}`
+  if (occurrence.type === 'GSLC') return `Replaces Session ${occurrence.sessionNumber}`
+  return `${TYPE_LABEL[occurrence.type]} · Session ${occurrence.sessionNumber}`
 }
 
 export function DaySchedule({ occurrences, freeSlots, onDelete }: DayScheduleProps) {
@@ -50,7 +57,10 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
                 </div>
                 <div className="schedule-detail">
                   <h3>{occurrence.name}</h3>
-                  <p>{describeOccurrence(occurrence)}</p>
+                  <p>
+                    <span className="type-badge">{TYPE_BADGE[occurrence.type]}</span>
+                    {describeOccurrence(occurrence)}
+                  </p>
                 </div>
                 <button
                   className="more-button"
@@ -62,6 +72,15 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
                 </button>
               </article>
             ))}
+          </div>
+        )}
+
+        {occurrences.length > 0 && (
+          <div className="legend">
+            <span><i className="lec" />LEC</span>
+            <span><i className="lab" />LAB</span>
+            <span><i className="gslc" />GSLC</span>
+            <span><i className="custom" />Personal</span>
           </div>
         )}
       </section>

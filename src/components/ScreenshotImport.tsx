@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { getTodayString, makeId, normalizeStartingSession, TYPE_RULES } from '../lib/schedule'
+import {
+  getTodayString,
+  makeId,
+  normalizeStartingSession,
+  totalSessionsFor,
+  TYPE_RULES,
+} from '../lib/schedule'
 import { recognizeScheduleImages } from '../lib/ocr'
 import type { ClassType, ImportDraft } from '../types'
 
@@ -87,7 +93,8 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
         if (changes.type) {
           next.startingSession = normalizeStartingSession(
             changes.type,
-            changes.type === 'GSLC' ? 1 : next.startingSession,
+            next.startingSession,
+            next.name,
           )
         }
         return next
@@ -193,7 +200,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
 
       <div className="import-list">
         {drafts.map((draft, index) => {
-          const total = TYPE_RULES[draft.type].totalSessions
+          const total = totalSessionsFor(draft.type === 'GSLC' ? 'LEC' : draft.type, draft.name)
           return (
             <article className="import-card" key={draft.id}>
               <header>
@@ -213,9 +220,9 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
                     <option value="GSLC">GSLC</option>
                   </select>
                 </label>
-                {draft.type !== 'GSLC' && (
+                {draft.type !== 'CUSTOM' && (
                   <label className="field">
-                    <span>Current session</span>
+                    <span>{draft.type === 'GSLC' ? 'Replaces session' : 'Current session'}</span>
                     <select value={draft.startingSession} onChange={(event) => updateDraft(draft.id, { startingSession: Number(event.target.value) })}>
                       {Array.from({ length: total }, (_, session) => session + 1).map((session) => (
                         <option value={session} key={session}>{session}</option>

@@ -85,15 +85,33 @@ export function getTodayString(): string {
   return toLocalDateString(new Date())
 }
 
-export function totalSessionsFor(type: ClassType): number {
+/**
+ * Mata kuliah that run more than the usual 13 lecture sessions. Matched loosely
+ * on the course name so OCR spacing and casing differences still count.
+ */
+export const COURSE_SESSION_OVERRIDES: Array<{ match: string; totalSessions: number }> = [
+  { match: 'algorithm design', totalSessions: 32 },
+  { match: 'artificial intelligence', totalSessions: 32 },
+]
+
+export function totalSessionsFor(type: ClassType, name?: string): number {
+  if (type === 'LEC' && name) {
+    const normalized = normalizeScheduleName(name)
+    const override = COURSE_SESSION_OVERRIDES.find((item) => normalized.includes(item.match))
+    if (override) return override.totalSessions
+  }
   return TYPE_RULES[type].totalSessions
 }
 
-export function normalizeStartingSession(type: ClassType, session: number): number {
+export function normalizeStartingSession(
+  type: ClassType,
+  session: number,
+  name?: string,
+): number {
   if (type === 'CUSTOM') return 1
   // A GSLC keeps the session number it stands in for, so the ceiling is the
-  // largest academic session number rather than its own single-occurrence count.
-  const ceiling = type === 'GSLC' ? TYPE_RULES.LEC.totalSessions : totalSessionsFor(type)
+  // largest lecture session number rather than its own single-occurrence count.
+  const ceiling = type === 'GSLC' ? totalSessionsFor('LEC', name) : totalSessionsFor(type, name)
   return Math.min(Math.max(Math.round(session) || 1, 1), ceiling)
 }
 
@@ -123,10 +141,13 @@ function customSeriesDates(series: ScheduleSeries): string[] {
 function academicGroupOccurrences(group: ScheduleSeries[]): ScheduleOccurrence[] {
   const type = group[0].type
   const rule = TYPE_RULES[type]
+  const totalSessions = totalSessionsFor(type, group[0].name)
   const firstSession = Math.min(
-    ...group.map((series) => normalizeStartingSession(type, series.startingSession)),
+    ...group.map((series) =>
+      normalizeStartingSession(type, series.startingSession, series.name),
+    ),
   )
-  const capacity = Math.max(rule.totalSessions - firstSession + 1, 1)
+  const capacity = Math.max(totalSessions - firstSession + 1, 1)
   const perSlot = rule.intervalDays === 0 ? 1 : Math.ceil(capacity / group.length) + 1
 
   const candidates = group.flatMap((series) =>
@@ -253,7 +274,7 @@ export function createSeries(input: SeriesInput): ScheduleSeries {
     firstDate: input.firstDate,
     startTime: input.startTime,
     endTime: input.endTime,
-    startingSession: normalizeStartingSession(input.type, input.startingSession),
+    startingSession: normalizeStartingSession(input.type, input.startingSession, input.name),
     excludedDates: [],
     createdAt: new Date().toISOString(),
     ...(input.repeat ? { repeat: input.repeat } : {}),
