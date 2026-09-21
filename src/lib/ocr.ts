@@ -1,7 +1,7 @@
 import { createWorker, OEM, PSM } from 'tesseract.js'
 import workerUrl from 'tesseract.js/dist/worker.min.js?url'
 import coreUrl from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url'
-import { makeId, normalizeStartingSession, toLocalDateString } from './schedule'
+import { makeId, normalizeSessionNumber, toLocalDateString } from './schedule'
 import type { ClassType, ImportDraft } from '../types'
 
 const MONTHS: Record<string, number> = {
@@ -107,10 +107,9 @@ export function parseScheduleText(text: string, fallbackDate: string): ImportDra
         ? 'LAB'
         : 'LEC'
     const sessionMatch = block.match(/\bSession\s*(\d{1,2})\b/i)
-    const startingSession = normalizeStartingSession(
-      detectedType,
-      sessionMatch ? Number(sessionMatch[1]) : 1,
-    )
+    const sessionNumber = sessionMatch
+      ? normalizeSessionNumber(Number(sessionMatch[1]))
+      : undefined
 
     return [
       {
@@ -120,7 +119,7 @@ export function parseScheduleText(text: string, fallbackDate: string): ImportDra
         date,
         startTime: time.startTime,
         endTime: time.endTime,
-        startingSession,
+        ...(sessionNumber ? { sessionNumber } : {}),
       },
     ]
   })

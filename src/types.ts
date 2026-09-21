@@ -1,39 +1,19 @@
 export type ClassType = 'LEC' | 'LAB' | 'GSLC' | 'CUSTOM'
 
-/** Repeat options available to personal ("Custom") schedules only. */
-export type CustomRepeat = 'once' | 'daily' | 'weekly' | 'biweekly'
-
-export interface ScheduleSeries {
+/**
+ * One schedule on one date. Nothing repeats: every class or personal activity is
+ * saved only on the date it actually happens.
+ */
+export interface ScheduleEntry {
   id: string
-  name: string
-  type: ClassType
-  firstDate: string
-  startTime: string
-  endTime: string
-  startingSession: number
-  excludedDates: string[]
-  createdAt: string
-  /** Only used when `type` is `CUSTOM`. */
-  repeat?: CustomRepeat
-  /** Last date a repeating custom schedule may occur on. */
-  endDate?: string
-  /** True when this GSLC was imported in place of a lecture session. */
-  replacesLecture?: boolean
-}
-
-export interface ScheduleOccurrence {
-  id: string
-  seriesId: string
   name: string
   type: ClassType
   date: string
   startTime: string
   endTime: string
-  sessionNumber: number
-  /** True when the parent series produces more than one occurrence. */
-  isRecurring: boolean
-  /** True when this GSLC stands in for a lecture session. */
-  replacesLecture?: boolean
+  /** Optional label taken from the campus screenshot, e.g. Session 7. */
+  sessionNumber?: number
+  createdAt: string
 }
 
 export interface ImportDraft {
@@ -43,7 +23,7 @@ export interface ImportDraft {
   date: string
   startTime: string
   endTime: string
-  startingSession: number
+  sessionNumber?: number
 }
 
 export interface FreeSlot {

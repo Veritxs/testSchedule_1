@@ -1,39 +1,13 @@
-import { formatDuration } from '../lib/schedule'
-import type { FreeSlot, ScheduleOccurrence } from '../types'
+import { describeEntry, formatDuration, TYPE_BADGES } from '../lib/schedule'
+import type { FreeSlot, ScheduleEntry } from '../types'
 
 interface DayScheduleProps {
-  occurrences: ScheduleOccurrence[]
+  entries: ScheduleEntry[]
   freeSlots: FreeSlot[]
-  onDelete: (occurrence: ScheduleOccurrence) => void
+  onDelete: (entry: ScheduleEntry) => void
 }
 
-const TYPE_LABEL: Record<ScheduleOccurrence['type'], string> = {
-  LEC: 'Lecture',
-  LAB: 'Lab',
-  GSLC: 'GSLC',
-  CUSTOM: 'Personal',
-}
-
-const TYPE_BADGE: Record<ScheduleOccurrence['type'], string> = {
-  LEC: 'LEC',
-  LAB: 'LAB',
-  GSLC: 'GSLC',
-  CUSTOM: 'PERSONAL',
-}
-
-function describeOccurrence(occurrence: ScheduleOccurrence): string {
-  if (occurrence.type === 'CUSTOM') {
-    return occurrence.isRecurring ? 'Repeating' : 'One time'
-  }
-  if (occurrence.type === 'GSLC') {
-    return occurrence.replacesLecture
-      ? `Replaces Session ${occurrence.sessionNumber}`
-      : `Session ${occurrence.sessionNumber}`
-  }
-  return `${TYPE_LABEL[occurrence.type]} · Session ${occurrence.sessionNumber}`
-}
-
-export function DaySchedule({ occurrences, freeSlots, onDelete }: DayScheduleProps) {
+export function DaySchedule({ entries, freeSlots, onDelete }: DayScheduleProps) {
   return (
     <div className="day-content">
       <section className="panel" aria-labelledby="schedule-heading">
@@ -42,10 +16,10 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
             <p className="eyebrow">Timetable</p>
             <h2 id="schedule-heading">Your schedule</h2>
           </div>
-          <span className="count-pill">{occurrences.length}</span>
+          <span className="count-pill">{entries.length}</span>
         </div>
 
-        {occurrences.length === 0 ? (
+        {entries.length === 0 ? (
           <div className="empty-state">
             <span className="empty-state__icon" aria-hidden="true">✦</span>
             <h3>Your day is clear</h3>
@@ -53,24 +27,24 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
           </div>
         ) : (
           <div className="schedule-list">
-            {occurrences.map((occurrence) => (
-              <article className={`schedule-card schedule-card--${occurrence.type.toLowerCase()}`} key={occurrence.id}>
-                <div className="schedule-time" aria-label={`${occurrence.startTime} to ${occurrence.endTime}`}>
-                  <strong>{occurrence.startTime}</strong>
-                  <span>{occurrence.endTime}</span>
+            {entries.map((entry) => (
+              <article className={`schedule-card schedule-card--${entry.type.toLowerCase()}`} key={entry.id}>
+                <div className="schedule-time" aria-label={`${entry.startTime} to ${entry.endTime}`}>
+                  <strong>{entry.startTime}</strong>
+                  <span>{entry.endTime}</span>
                 </div>
                 <div className="schedule-detail">
-                  <h3>{occurrence.name}</h3>
+                  <h3>{entry.name}</h3>
                   <p>
-                    <span className="type-badge">{TYPE_BADGE[occurrence.type]}</span>
-                    {describeOccurrence(occurrence)}
+                    <span className="type-badge">{TYPE_BADGES[entry.type]}</span>
+                    {describeEntry(entry)}
                   </p>
                 </div>
                 <button
                   className="more-button"
                   type="button"
-                  onClick={() => onDelete(occurrence)}
-                  aria-label={`Remove ${occurrence.name}`}
+                  onClick={() => onDelete(entry)}
+                  aria-label={`Remove ${entry.name}`}
                 >
                   <span aria-hidden="true">•••</span>
                 </button>
@@ -79,7 +53,7 @@ export function DaySchedule({ occurrences, freeSlots, onDelete }: DaySchedulePro
           </div>
         )}
 
-        {occurrences.length > 0 && (
+        {entries.length > 0 && (
           <div className="legend">
             <span><i className="lec" />LEC</span>
             <span><i className="lab" />LAB</span>

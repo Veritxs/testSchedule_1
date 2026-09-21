@@ -1,22 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import {
-  CUSTOM_REPEAT_LABELS,
-  defaultCustomEndDate,
-  getTodayString,
-  normalizeStartingSession,
-  totalSessionsFor,
-} from '../lib/schedule'
-import type { ClassType, CustomRepeat } from '../types'
+import { useState, type FormEvent } from 'react'
+import { getTodayString, normalizeSessionNumber } from '../lib/schedule'
+import type { ClassType } from '../types'
 
 export interface ScheduleFormValues {
   name: string
   type: ClassType
-  firstDate: string
+  date: string
   startTime: string
   endTime: string
-  startingSession: number
-  repeat?: CustomRepeat
-  endDate?: string
+  sessionNumber?: number
 }
 
 interface ScheduleFormProps {
@@ -29,9 +21,9 @@ interface ScheduleFormProps {
 }
 
 const TYPE_COPY: Record<ClassType, { title: string; short: string }> = {
-  LEC: { title: 'LEC', short: 'Weekly · 13' },
-  LAB: { title: 'LAB', short: '2 weeks · 6' },
-  GSLC: { title: 'GSLC', short: 'One time' },
+  LEC: { title: 'LEC', short: 'Lecture' },
+  LAB: { title: 'LAB', short: 'Lab' },
+  GSLC: { title: 'GSLC', short: 'Self-learning' },
   CUSTOM: { title: 'Custom', short: 'My own' },
 }
 
@@ -44,29 +36,15 @@ export function ScheduleForm({
 }: ScheduleFormProps) {
   const [name, setName] = useState(initial?.name ?? '')
   const [type, setType] = useState<ClassType>(initial?.type ?? 'LEC')
-  const [firstDate, setFirstDate] = useState(initial?.firstDate ?? getTodayString())
+  const [date, setDate] = useState(initial?.date ?? getTodayString())
   const [startTime, setStartTime] = useState(initial?.startTime ?? '09:00')
   const [endTime, setEndTime] = useState(initial?.endTime ?? '10:40')
-  const [startingSession, setStartingSession] = useState(initial?.startingSession ?? 1)
-  const [repeat, setRepeat] = useState<CustomRepeat>(initial?.repeat ?? 'weekly')
-  const [endDate, setEndDate] = useState(initial?.endDate ?? '')
+  const [session, setSession] = useState(
+    initial?.sessionNumber ? String(initial.sessionNumber) : '',
+  )
   const [error, setError] = useState('')
 
   const isCustom = type === 'CUSTOM'
-  const totalSessions = totalSessionsFor(type, name)
-  const effectiveEndDate = endDate || defaultCustomEndDate(firstDate)
-
-  const recurrenceText = useMemo(() => {
-    if (isCustom) {
-      if (repeat === 'once') return 'This personal schedule is saved only on the selected date.'
-      return `${CUSTOM_REPEAT_LABELS[repeat]} from the selected date until ${effectiveEndDate}. No class sessions are counted.`
-    }
-    if (type === 'GSLC') return 'This is saved only on the selected date.'
-    const cadence = type === 'LAB' ? 'Every 2 weeks' : 'Weekly'
-    const remaining =
-      totalSessions - normalizeStartingSession(type, startingSession, name) + 1
-    return `${cadence} · ${totalSessions} sessions. Starting at Session ${startingSession}, ${remaining} occurrence${remaining === 1 ? '' : 's'} will be added. If this mata kuliah has another slot of the same type, they share the remaining sessions and the numbering continues across both.`
-  }, [effectiveEndDate, isCustom, name, repeat, startingSession, totalSessions, type])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -75,7 +53,7 @@ export function ScheduleForm({
       setError(isCustom ? 'Enter a name for this schedule.' : 'Enter the mata kuliah name.')
       return
     }
-    if (!firstDate) {
+    if (!date) {
       setError('Choose the date of this schedule.')
       return
     }
@@ -83,24 +61,14 @@ export function ScheduleForm({
       setError('End time must be after start time.')
       return
     }
-    if (isCustom && repeat !== 'once' && endDate && endDate < firstDate) {
-      setError('The repeat end date cannot be before the start date.')
-      return
-    }
 
     onSave({
       name: cleanName,
       type,
-      firstDate,
+      date,
       startTime,
       endTime,
-      startingSession: normalizeStartingSession(type, startingSession, cleanName),
-      ...(isCustom
-        ? {
-            repeat,
-            ...(repeat === 'once' ? {} : { endDate: effectiveEndDate }),
-          }
-        : {}),
+      sessionNumber: isCustom ? undefined : normalizeSessionNumber(session),
     })
   }
 
@@ -125,10 +93,7 @@ export function ScheduleForm({
               className={type === option ? 'is-active' : ''}
               key={option}
               type="button"
-              onClick={() => {
-                setType(option)
-                if (option === 'GSLC' || option === 'CUSTOM') setStartingSession(1)
-              }}
+              onClick={() => setType(option)}
             >
               <strong>{TYPE_COPY[option].title}</strong>
               <small>{TYPE_COPY[option].short}</small>
@@ -138,8 +103,8 @@ export function ScheduleForm({
       </fieldset>
 
       <label className="field">
-        <span>{type === 'GSLC' || (isCustom && repeat === 'once') ? 'Date' : isCustom ? 'Starting date' : 'Date of this session'}</span>
-        <input type="date" value={firstDate} onChange={(event) => setFirstDate(event.target.value)} />
+        <span>Date</span>
+        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
       </label>
 
       <div className="two-columns">
@@ -153,47 +118,25 @@ export function ScheduleForm({
         </label>
       </div>
 
-      {isCustom && (
+      {!isCustom && (
         <label className="field">
-          <span>Repeat</span>
-          <select
-            value={repeat}
-            onChange={(event) => setRepeat(event.target.value as CustomRepeat)}
-          >
-            {(Object.keys(CUSTOM_REPEAT_LABELS) as CustomRepeat[]).map((option) => (
-              <option value={option} key={option}>{CUSTOM_REPEAT_LABELS[option]}</option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      {isCustom && repeat !== 'once' && (
-        <label className="field">
-          <span>Repeat until</span>
+          <span>Session number (optional)</span>
           <input
-            type="date"
-            min={firstDate}
-            value={effectiveEndDate}
-            onChange={(event) => setEndDate(event.target.value)}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={40}
+            value={session}
+            placeholder="e.g. 7"
+            onChange={(event) => setSession(event.target.value)}
           />
         </label>
       )}
 
-      {!isCustom && type !== 'GSLC' && (
-        <label className="field">
-          <span>Session on this date</span>
-          <select
-            value={startingSession}
-            onChange={(event) => setStartingSession(Number(event.target.value))}
-          >
-            {Array.from({ length: totalSessions }, (_, index) => index + 1).map((session) => (
-              <option value={session} key={session}>Session {session}</option>
-            ))}
-          </select>
-        </label>
-      )}
-
-      <p className="form-hint">{recurrenceText}</p>
+      <p className="form-hint">
+        Saved on {date || 'the chosen date'} only. Nothing repeats automatically, so add each
+        class on the date it actually happens.
+      </p>
       {(error || externalError) && (
         <p className="form-error" role="alert">{error || externalError}</p>
       )}

@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  getTodayString,
-  makeId,
-  normalizeStartingSession,
-  totalSessionsFor,
-  TYPE_RULES,
-} from '../lib/schedule'
+import { getTodayString, makeId, normalizeSessionNumber } from '../lib/schedule'
 import { recognizeScheduleImages } from '../lib/ocr'
 import type { ClassType, ImportDraft } from '../types'
 
@@ -28,7 +22,6 @@ function emptyDraft(): ImportDraft {
     date: getTodayString(),
     startTime: '09:00',
     endTime: '10:40',
-    startingSession: 1,
   }
 }
 
@@ -90,13 +83,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
       current.map((draft) => {
         if (draft.id !== id) return draft
         const next = { ...draft, ...changes }
-        if (changes.type) {
-          next.startingSession = normalizeStartingSession(
-            changes.type,
-            next.startingSession,
-            next.name,
-          )
-        }
+        if (changes.type === 'CUSTOM') next.sessionNumber = undefined
         return next
       }),
     )
@@ -200,7 +187,6 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
 
       <div className="import-list">
         {drafts.map((draft, index) => {
-          const total = totalSessionsFor(draft.type === 'GSLC' ? 'LEC' : draft.type, draft.name)
           return (
             <article className="import-card" key={draft.id}>
               <header>
@@ -218,16 +204,25 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
                     <option value="LEC">LEC</option>
                     <option value="LAB">LAB</option>
                     <option value="GSLC">GSLC</option>
+                    <option value="CUSTOM">Custom</option>
                   </select>
                 </label>
                 {draft.type !== 'CUSTOM' && (
                   <label className="field">
-                    <span>{draft.type === 'GSLC' ? 'Replaces session' : 'Current session'}</span>
-                    <select value={draft.startingSession} onChange={(event) => updateDraft(draft.id, { startingSession: Number(event.target.value) })}>
-                      {Array.from({ length: total }, (_, session) => session + 1).map((session) => (
-                        <option value={session} key={session}>{session}</option>
-                      ))}
-                    </select>
+                    <span>Session</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={40}
+                      placeholder="—"
+                      value={draft.sessionNumber ?? ''}
+                      onChange={(event) =>
+                        updateDraft(draft.id, {
+                          sessionNumber: normalizeSessionNumber(event.target.value),
+                        })
+                      }
+                    />
                   </label>
                 )}
                 <label className="field import-date">
@@ -245,7 +240,7 @@ export function ScreenshotImport({ onImport, onCancel }: ScreenshotImportProps) 
                   <input type="time" value={draft.endTime} onChange={(event) => updateDraft(draft.id, { endTime: event.target.value })} />
                 </label>
               </div>
-              <p className="detected-rule">{TYPE_RULES[draft.type].label}</p>
+              <p className="detected-rule">Saved on {draft.date} only · nothing repeats</p>
             </article>
           )
         })}

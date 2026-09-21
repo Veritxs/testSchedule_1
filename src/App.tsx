@@ -4,43 +4,44 @@ import { Modal } from './components/Modal'
 import { ScheduleForm, type ScheduleFormValues } from './components/ScheduleForm'
 import { ScreenshotImport, type ImportOutcome } from './components/ScreenshotImport'
 import { SettingsForm } from './components/SettingsForm'
+import { WeekGrid } from './components/WeekGrid'
 import {
   addDays,
-  applySeries,
+  applyEntry,
   calculateFreeSlots,
-  createSeries,
+  createEntry,
   formatLongDate,
   formatShortDate,
   formatWeekday,
-  getOccurrences,
+  getEntries,
   getTodayString,
   getWeekDays,
   parseLocalDate,
   startOfWeek,
 } from './lib/schedule'
 import {
+  loadEntries,
   loadPreferences,
-  loadSchedules,
+  saveEntries,
   savePreferences,
-  saveSchedules,
 } from './lib/storage'
-import type { ImportDraft, ScheduleOccurrence, ScheduleSeries } from './types'
+import type { ImportDraft, ScheduleEntry } from './types'
 
-type ViewMode = 'today' | 'week'
+type ViewMode = 'today' | 'week' | 'grid'
 type OpenModal = 'add' | 'import' | 'settings' | 'removeAll' | null
 
 function App() {
   const today = getTodayString()
-  const [series, setSeries] = useState<ScheduleSeries[]>(loadSchedules)
+  const [entries, setEntries] = useState<ScheduleEntry[]>(loadEntries)
   const [preferences, setPreferences] = useState(loadPreferences)
   const [view, setView] = useState<ViewMode>('today')
   const [selectedDate, setSelectedDate] = useState(today)
   const [openModal, setOpenModal] = useState<OpenModal>(null)
-  const [deleteTarget, setDeleteTarget] = useState<ScheduleOccurrence | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ScheduleEntry | null>(null)
   const [addError, setAddError] = useState('')
   const [toast, setToast] = useState('')
 
-  useEffect(() => saveSchedules(series), [series])
+  useEffect(() => saveEntries(entries), [entries])
   useEffect(() => savePreferences(preferences), [preferences])
   useEffect(() => {
     if (!toast) return
@@ -51,24 +52,23 @@ function App() {
   const weekStart = startOfWeek(selectedDate)
   const weekDays = useMemo(() => getWeekDays(weekStart), [weekStart])
   const weekEnd = weekDays[6]
-  const weekOccurrences = useMemo(
-    () => getOccurrences(series, weekStart, weekEnd),
-    [series, weekEnd, weekStart],
+  const weekEntries = useMemo(
+    () => getEntries(entries, weekStart, weekEnd),
+    [entries, weekEnd, weekStart],
   )
-  const dayOccurrences = useMemo(
-    () => getOccurrences(series, selectedDate, selectedDate),
-    [selectedDate, series],
+  const dayEntries = useMemo(
+    () => getEntries(entries, selectedDate, selectedDate),
+    [entries, selectedDate],
   )
-  const totalOccurrences = useMemo(() => getOccurrences(series).length, [series])
   const freeSlots = useMemo(
     () =>
       calculateFreeSlots(
-        dayOccurrences,
+        dayEntries,
         preferences.dayStart,
         preferences.dayEnd,
         preferences.minimumFreeMinutes,
       ),
-    [dayOccurrences, preferences],
+    [dayEntries, preferences],
   )
 
   function showToday() {
@@ -81,45 +81,52 @@ function App() {
     if (view === 'today') setSelectedDate(today)
   }
 
+  function showGrid() {
+    setView('grid')
+    if (view === 'today') setSelectedDate(today)
+  }
+
   function moveDate(direction: -1 | 1) {
-    setSelectedDate((current) => addDays(current, direction * (view === 'week' ? 7 : 1)))
+    setSelectedDate((current) =>
+      addDays(current, direction * (view === 'today' ? 1 : 7)),
+    )
   }
 
   function addSchedule(values: ScheduleFormValues) {
-    const result = applySeries(series, createSeries(values))
+    const result = applyEntry(entries, createEntry(values))
     if (result.status === 'duplicate' && result.duplicate) {
       setAddError(
-        `“${result.duplicate.name}” is already in your timetable on ${formatLongDate(result.duplicate.date)} at ${result.duplicate.startTime}–${result.duplicate.endTime}, so nothing was added.`,
+        `“${result.duplicate.name}” is already saved on ${formatLongDate(result.duplicate.date)} at ${result.duplicate.startTime}–${result.duplicate.endTime}, so nothing was added.`,
       )
       return
     }
 
     setAddError('')
-    setSeries(result.series)
-    setSelectedDate(values.firstDate)
+    setEntries(result.entries)
+    setSelectedDate(values.date)
     setOpenModal(null)
     setToast(
-      result.status === 'replaced' && result.replaced
-        ? `${values.name} replaced Session ${result.replaced.sessionNumber}`
+      result.status === 'replaced'
+        ? `${values.name} replaced the lecture on this date`
         : `${values.name} added`,
     )
   }
 
   function importSchedules(drafts: ImportDraft[]): ImportOutcome {
-    let working = series
+    let working = entries
     let importedCount = 0
     let replacedCount = 0
     const skipped: Array<{ name: string; date: string }> = []
     let firstDate = ''
 
     for (const draft of drafts) {
-      const result = applySeries(working, createSeries({ ...draft, firstDate: draft.date }))
+      const result = applyEntry(working, createEntry(draft))
       if (result.status === 'duplicate' && result.duplicate) {
         skipped.push({ name: result.duplicate.name, date: result.duplicate.date })
         continue
       }
 
-      working = result.series
+      working = result.entries
       if (result.status === 'replaced') replacedCount += 1
       else importedCount += 1
       if (!firstDate) firstDate = draft.date
@@ -127,49 +134,29 @@ function App() {
 
     if (!importedCount && !replacedCount) return { importedCount: 0, replacedCount: 0, skipped }
 
-    setSeries(working)
+    setEntries(working)
     setSelectedDate(firstDate)
     setOpenModal(null)
 
     const parts: string[] = []
     if (importedCount) parts.push(`${importedCount} imported`)
-    if (replacedCount) parts.push(`${replacedCount} replaced a session`)
+    if (replacedCount) parts.push(`${replacedCount} replaced a lecture`)
     if (skipped.length) parts.push(`${skipped.length} already existed`)
     setToast(parts.join(' · '))
 
     return { importedCount, replacedCount, skipped }
   }
 
-  function removeOccurrence() {
+  function removeEntry() {
     if (!deleteTarget) return
-    setSeries((current) =>
-      current.map((schedule) =>
-        schedule.id === deleteTarget.seriesId
-          ? {
-              ...schedule,
-              excludedDates: Array.from(
-                new Set([...schedule.excludedDates, deleteTarget.date]),
-              ),
-            }
-          : schedule,
-      ),
-    )
-    setToast('This occurrence was removed')
-    setDeleteTarget(null)
-  }
-
-  function removeSeries() {
-    if (!deleteTarget) return
-    setSeries((current) =>
-      current.filter((schedule) => schedule.id !== deleteTarget.seriesId),
-    )
-    setToast(`${deleteTarget.name} schedule removed`)
+    setEntries((current) => current.filter((entry) => entry.id !== deleteTarget.id))
+    setToast(`${deleteTarget.name} removed`)
     setDeleteTarget(null)
   }
 
   function removeAllSchedules() {
-    const removedCount = series.length
-    setSeries([])
+    const removedCount = entries.length
+    setEntries([])
     setDeleteTarget(null)
     setOpenModal(null)
     setToast(`All ${removedCount} schedule${removedCount === 1 ? '' : 's'} removed`)
@@ -194,24 +181,25 @@ function App() {
 
       <main className="main-content">
         <section className="hero">
-          <div className="view-switcher" aria-label="Timetable view">
+          <div className="view-switcher view-switcher--triple" aria-label="Timetable view">
             <button className={view === 'today' ? 'is-active' : ''} type="button" onClick={showToday}>Today</button>
             <button className={view === 'week' ? 'is-active' : ''} type="button" onClick={showWeek}>Week</button>
+            <button className={view === 'grid' ? 'is-active' : ''} type="button" onClick={showGrid}>Grid</button>
           </div>
 
           <div className="date-navigation">
-            <button className="round-button" type="button" onClick={() => moveDate(-1)} aria-label={view === 'week' ? 'Previous week' : 'Previous day'}>‹</button>
+            <button className="round-button" type="button" onClick={() => moveDate(-1)} aria-label={view === 'today' ? 'Previous day' : 'Previous week'}>‹</button>
             <div>
               <p>{selectedDate === today ? 'Today' : formatWeekday(selectedDate)}</p>
-              <h1>{view === 'week' ? weekRangeLabel : formatLongDate(selectedDate)}</h1>
+              <h1>{view === 'today' ? formatLongDate(selectedDate) : weekRangeLabel}</h1>
             </div>
-            <button className="round-button" type="button" onClick={() => moveDate(1)} aria-label={view === 'week' ? 'Next week' : 'Next day'}>›</button>
+            <button className="round-button" type="button" onClick={() => moveDate(1)} aria-label={view === 'today' ? 'Next day' : 'Next week'}>›</button>
           </div>
 
           {view === 'week' && (
             <div className="week-strip" aria-label="Choose a day">
               {weekDays.map((date) => {
-                const count = weekOccurrences.filter((item) => item.date === date).length
+                const count = weekEntries.filter((item) => item.date === date).length
                 const isSelected = date === selectedDate
                 return (
                   <button className={isSelected ? 'is-selected' : ''} type="button" key={date} onClick={() => setSelectedDate(date)}>
@@ -225,11 +213,27 @@ function App() {
           )}
         </section>
 
-        <DaySchedule occurrences={dayOccurrences} freeSlots={freeSlots} onDelete={setDeleteTarget} />
+        {view === 'grid' ? (
+          <WeekGrid
+            weekDays={weekDays}
+            entries={weekEntries}
+            dayStart={preferences.dayStart}
+            dayEnd={preferences.dayEnd}
+            today={today}
+            selectedDate={selectedDate}
+            onSelectDate={(date) => {
+              setSelectedDate(date)
+              setView('today')
+            }}
+            onSelectEntry={setDeleteTarget}
+          />
+        ) : (
+          <DaySchedule entries={dayEntries} freeSlots={freeSlots} onDelete={setDeleteTarget} />
+        )}
       </main>
 
       <nav className="bottom-nav" aria-label="Main navigation">
-        <button className="nav-item is-active" type="button" onClick={showToday}>
+        <button className={`nav-item${view !== 'grid' ? ' is-active' : ''}`} type="button" onClick={showToday}>
           <span aria-hidden="true">▦</span>
           <small>Schedule</small>
         </button>
@@ -248,9 +252,9 @@ function App() {
         >
           <span aria-hidden="true">＋</span>
         </button>
-        <button className="nav-item" type="button" onClick={showWeek}>
+        <button className={`nav-item${view === 'grid' ? ' is-active' : ''}`} type="button" onClick={showGrid}>
           <span aria-hidden="true">▤</span>
-          <small>Week</small>
+          <small>Grid</small>
         </button>
         <button className="nav-item" type="button" onClick={() => setOpenModal('settings')}>
           <span aria-hidden="true">⚙</span>
@@ -261,7 +265,7 @@ function App() {
       {openModal === 'add' && (
         <Modal title="Add schedule" onClose={() => setOpenModal(null)}>
           <ScheduleForm
-            initial={{ firstDate: selectedDate }}
+            initial={{ date: selectedDate }}
             externalError={addError}
             onSave={addSchedule}
             onCancel={() => setOpenModal(null)}
@@ -282,7 +286,7 @@ function App() {
         <Modal title="Free-time settings" onClose={() => setOpenModal(null)}>
           <SettingsForm
             preferences={preferences}
-            scheduleCount={series.length}
+            scheduleCount={entries.length}
             onRequestRemoveAll={() => setOpenModal('removeAll')}
             onCancel={() => setOpenModal(null)}
             onSave={(next) => {
@@ -301,8 +305,7 @@ function App() {
               <span aria-hidden="true">⚠</span>
               <p>
                 <strong>This cannot be undone</strong>
-                {series.length} saved schedule{series.length === 1 ? '' : 's'} and{' '}
-                {totalOccurrences} upcoming occurrence{totalOccurrences === 1 ? '' : 's'} will be
+                All {entries.length} saved schedule{entries.length === 1 ? '' : 's'} will be
                 deleted. Your settings and campus screenshots are kept.
               </p>
             </div>
@@ -327,19 +330,9 @@ function App() {
                 <span>{formatLongDate(deleteTarget.date)} · {deleteTarget.startTime}–{deleteTarget.endTime}</span>
               </div>
             </div>
-            {deleteTarget.isRecurring && (
-              <button className="delete-option" type="button" onClick={removeOccurrence}>
-                <strong>Remove this occurrence</strong>
-                <span>Keep the rest of the repeating schedule</span>
-              </button>
-            )}
-            <button className="delete-option delete-option--danger" type="button" onClick={removeSeries}>
-              <strong>{deleteTarget.isRecurring ? 'Remove entire series' : 'Remove schedule'}</strong>
-              <span>
-                {deleteTarget.isRecurring
-                  ? 'Delete every remaining occurrence'
-                  : 'Delete this one-time schedule'}
-              </span>
+            <button className="delete-option delete-option--danger" type="button" onClick={removeEntry}>
+              <strong>Remove this schedule</strong>
+              <span>Only this date is affected</span>
             </button>
             <button className="button button--ghost button--full" type="button" onClick={() => setDeleteTarget(null)}>Cancel</button>
           </div>
